@@ -9,11 +9,14 @@ app = FastAPI()
 # CORS setup — allow Firebase site
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://house-of-prompts.web.app"],
+    allow_origins=[
+        "https://house-of-prompts.web.app",
+        "https://house-of-prompts.firebaseapp.com"
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Load your OpenAI key from Render environment
 openai.api_key = os.environ.get("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")
 
@@ -61,4 +64,3 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
