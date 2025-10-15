@@ -44,14 +44,20 @@ async def analyze(article: Article):
         Article: {text}
         """
 
-        # Correct usage of Hugging Face InferenceClient
+        # Hugging Face text generation
         response = client.text_generation(
-            model="gpt2",  # Replace with a better HF model later if desired
+            model="gpt2",
             prompt=prompt,
             max_new_tokens=200
         )
 
-        output = response.generated_text if hasattr(response, "generated_text") else response[0]['generated_text']
+        # Safely extract generated text
+        if isinstance(response, list) and 'generated_text' in response[0]:
+            output = response[0]['generated_text']
+        elif hasattr(response, "generated_text"):
+            output = response.generated_text
+        else:
+            output = "Could not generate text."
 
         return {
             "credibility_score": "AI-generated",
@@ -60,5 +66,4 @@ async def analyze(article: Article):
         }
 
     except Exception as e:
-        # Return error details instead of crashing
         return {"error": str(e)}
