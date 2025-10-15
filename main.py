@@ -1,6 +1,8 @@
-import openai
+from huggingface_hub import InferenceClient
 
-openai.api_key = "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"
+# Use your Hugging Face token here
+HF_TOKEN = "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"
+client = InferenceClient(token=HF_TOKEN)
 
 @app.post("/analyze")
 async def analyze(article: Article):
@@ -17,12 +19,13 @@ async def analyze(article: Article):
     Article: {text}
     """
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}]
+    response = client.text_generation(
+        model="gpt2",  # Replace with any suitable HF model
+        inputs=prompt,
+        max_new_tokens=200
     )
 
-    output = response.choices[0].message["content"]
+    output = response.generated_text if hasattr(response, "generated_text") else response[0]['generated_text']
 
     # You can parse the output better later
     return {
