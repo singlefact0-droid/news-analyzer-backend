@@ -17,7 +17,7 @@ app = FastAPI()
 # Enable CORS for your frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://house-of-prompts.web.app"],  # your frontend URL
+    allow_origins=["https://house-of-prompts.web.app"],  # frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,9 +44,10 @@ async def analyze(article: Article):
         Article: {text}
         """
 
+        # Correct usage of Hugging Face InferenceClient
         response = client.text_generation(
-            model="gpt2",
-            inputs=prompt,
+            model="gpt2",  # Replace with a better HF model later if desired
+            prompt=prompt,
             max_new_tokens=200
         )
 
@@ -59,4 +60,5 @@ async def analyze(article: Article):
         }
 
     except Exception as e:
+        # Return error details instead of crashing
         return {"error": str(e)}
