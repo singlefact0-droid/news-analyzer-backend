@@ -1,9 +1,24 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
 from huggingface_hub import InferenceClient
+import os
+from dotenv import load_dotenv
 
-# Use your Hugging Face token here
-HF_TOKEN = "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"
-client = InferenceClient(token=HF_TOKEN)
+# Load HF token from .env
+load_dotenv()
+HF_TOKEN = os.getenv("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")
 
+# Create Hugging Face client
+client = InferenceClient(token=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)
+
+# 1️⃣ Define FastAPI app
+app = FastAPI()
+
+# 2️⃣ Define request model
+class Article(BaseModel):
+    article: str
+
+# 3️⃣ Define route
 @app.post("/analyze")
 async def analyze(article: Article):
     text = article.article
@@ -27,7 +42,6 @@ async def analyze(article: Article):
 
     output = response.generated_text if hasattr(response, "generated_text") else response[0]['generated_text']
 
-    # You can parse the output better later
     return {
         "credibility_score": "AI-generated",
         "summary": output,
