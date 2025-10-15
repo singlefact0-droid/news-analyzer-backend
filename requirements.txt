@@ -1,4 +1,4 @@
-fastapi==0.111.0
-uvicorn[standard]==0.23.1
-cohere==4.11.0
-python-dotenv==1.0.1
+fastapi
+uvicorn
+openai
+pydantic
