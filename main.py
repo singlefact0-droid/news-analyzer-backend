@@ -5,7 +5,7 @@ from huggingface_hub import InferenceClient
 
 # -----------------------------
 # Directly include your Hugging Face token here
-HF_TOKEN = "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"
+HF_TOKEN = "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"
 # -----------------------------
 
 # Create Hugging Face client
@@ -67,3 +67,4 @@ async def analyze(article: Article):
 
     except Exception as e:
         return {"error": str(e)}
+
