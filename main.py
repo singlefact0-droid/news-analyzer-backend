@@ -1,69 +1,40 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-import openai
-import os
+from pydantic import BaseModel
 
 app = FastAPI()
 
-# CORS setup
+# ✅ Allow frontend domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://house-of-prompts.web.app",
-        "https://house-of-prompts.firebaseapp.com",
-        "http://localhost:5500"
-    ],
+    allow_origins=["*"],  # or restrict to your Firebase URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Set up API key
-openai.api_key = os.getenv("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")
+class Article(BaseModel):
+    article: str
 
 @app.get("/")
 def home():
-    return {"message": "✅ Backend is running successfully!"}
+    return {"message": "News Analyzer Backend Running ✅"}
 
 @app.post("/analyze")
-async def analyze_article(request: Request):
-    data = await request.json()
-    article = data.get("article", "").strip()
+async def analyze(article: Article):
+    text = article.article
 
-    if not article:
+    # Dummy analysis logic (you can replace later)
+    if not text.strip():
         return {
-            "score": "-",
-            "summary": "⚠️ No article text provided.",
-            "counter": "Please paste a valid article."
+            "credibility_score": None,
+            "summary": "No article text provided.",
+            "counterarguments": "N/A"
         }
 
-    try:
-        # 🧠 Ask OpenAI to analyze credibility, summarize, and generate counterarguments
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an AI trained to evaluate news credibility. "
-                        "Given a news article, respond in JSON with three fields: "
-                        "'credibility_score' (0 to 100), "
-                        "'summary' (2-3 sentences), "
-                        "and 'counterarguments' (short critical reasoning points)."
-                    ),
-                },
-                {"role": "user", "content": article},
-            ],
-        )
-
-        message = response["choices"][0]["message"]["content"]
-
-        # Return AI response directly
-        return {"result": message}
-
-    except Exception as e:
-        return {
-            "score": "-",
-            "summary": "⚠️ Could not analyze this article.",
-            "counter": f"Error: {str(e)}"
-        }
+    # Fake AI output for testing
+    return {
+        "credibility_score": "85%",
+        "summary": "This article discusses recent events and seems partially credible.",
+        "counterarguments": "However, the article lacks verified sources and may exaggerate claims."
+    }
