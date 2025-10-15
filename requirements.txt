@@ -1,7 +1,8 @@
-fastapi==0.111.0          # Web framework
-uvicorn[standard]==0.23.1 # ASGI server to run FastAPI
-huggingface_hub==0.18.1   # Hugging Face client
-python-dotenv==1.0.1      # Load HF_TOKEN from .env securely
-requests==2.32.0          # Only if calling HF REST API manually
+fastapi==0.111.0
+uvicorn[standard]==0.23.1
+huggingface_hub
+python-dotenv==1.0.1
+requests==2.32.0
 starlette
+
 
