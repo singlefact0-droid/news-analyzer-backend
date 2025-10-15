@@ -2,13 +2,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from huggingface_hub import InferenceClient
-import os
-from dotenv import load_dotenv
 
-# 1️⃣ Define FastAPI app first
+# -----------------------------
+# Directly include your HF token here
+HF_TOKEN = "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"
+# -----------------------------
+
+# Create Hugging Face client
+client = InferenceClient(token=HF_TOKEN)
+
+# Create FastAPI app
 app = FastAPI()
 
-# 2️⃣ Add CORS middleware
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://house-of-prompts.web.app"],  # frontend URL
@@ -17,16 +23,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3️⃣ Load HF token from .env
-load_dotenv()
-HF_TOKEN = os.getenv("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")  # <- correct environment variable name
-client = InferenceClient(token="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")
-
-# 4️⃣ Define request model
+# Request model
 class Article(BaseModel):
     article: str
 
-# 5️⃣ Define route
+# Analyze route
 @app.post("/analyze")
 async def analyze(article: Article):
     text = article.article
@@ -35,7 +36,7 @@ async def analyze(article: Article):
 
     prompt = f"""
     Analyze the credibility of this news article and give:
-    1. Credibility score out of 100
+    1. Credibility score out of 100%
     2. Short summary
     3. Counterarguments against its claims
 
@@ -43,7 +44,7 @@ async def analyze(article: Article):
     """
 
     response = client.text_generation(
-        model="gpt2",  # Replace with any suitable HF model
+        model="gpt2",  # Replace with a better HF model if desired
         inputs=prompt,
         max_new_tokens=200
     )
