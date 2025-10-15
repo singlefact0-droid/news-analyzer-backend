@@ -12,8 +12,7 @@ CORS(app)  # Allows requests from all origins; can be restricted later
 # -----------------------------
 # OpenRouter / OpenAI client
 # -----------------------------
-OPENROUTER_KEY = "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"  # Replace with your key
-
+OPENROUTER_KEY = os.getenv("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")
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_KEY
@@ -69,3 +68,4 @@ Article: {article_text}
 # -----------------------------
 # Root route for testing
 # ----------------------
+
