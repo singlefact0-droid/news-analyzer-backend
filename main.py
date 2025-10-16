@@ -87,18 +87,25 @@ def home():
 import requests
 
 @app.get("/news")
-def get_news(q: str = "latest"):
-    """
-    This route fetches news using your GNews API key and sends it to your frontend.
-    It acts as a proxy to bypass CORS issues.
-    """
-    api_key = "2bad3eea46a5af8373e977e781fc5547"  # 🔹 Replace this with your real GNews API key
-    url = f"https://gnews.io/api/v4/search?q={q}&lang=en&max=20&apikey={api_key}"
-    
+async def get_news():
+    GNEWS_API_KEY = "YOUR_GNEWS_API_KEY"
+    categories = ["general", "world", "science", "nation"]
+    all_articles = []
+
     try:
-        res = requests.get(url)
-        return res.json()
+        for cat in categories:
+            url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
+            res = requests.get(url)
+            if res.status_code == 200:
+                data = res.json()
+                if "articles" in data:
+                    all_articles.extend(data["articles"])
+
+        return {"articles": all_articles}
+
     except Exception as e:
         return {"error": str(e)}
+
+
 
 
