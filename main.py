@@ -88,7 +88,7 @@ import requests
 
 @app.get("/news")
 async def get_news():
-    GNEWS_API_KEY = "YOUR_GNEWS_API_KEY"
+    GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
     categories = ["general", "world", "science", "nation"]
     all_articles = []
 
@@ -105,6 +105,7 @@ async def get_news():
 
     except Exception as e:
         return {"error": str(e)}
+
 
 
 
