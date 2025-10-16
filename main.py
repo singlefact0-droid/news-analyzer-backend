@@ -83,3 +83,22 @@ async def analyze(article: Article):
 @app.get("/")
 def home():
     return {"message": "✅ News Analyzer API with OpenRouter is running!"}
+
+import requests
+
+@app.get("/news")
+def get_news(q: str = "latest"):
+    """
+    This route fetches news using your GNews API key and sends it to your frontend.
+    It acts as a proxy to bypass CORS issues.
+    """
+    api_key = "2bad3eea46a5af8373e977e781fc5547"  # 🔹 Replace this with your real GNews API key
+    url = f"https://gnews.io/api/v4/search?q={q}&lang=en&max=20&apikey={api_key}"
+    
+    try:
+        res = requests.get(url)
+        return res.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
