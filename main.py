@@ -4,13 +4,9 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 import json
-import requests
-import feedparser
 
-# ✅ Load API key safely
+# ✅ Load key from environment (Render injects it)
 OPENROUTER_API_KEY = os.getenv("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")
-
-
 
 # ✅ Initialize OpenRouter client
 client = OpenAI(
@@ -20,15 +16,14 @@ client = OpenAI(
 
 app = FastAPI()
 
-# ✅ Enable CORS
+# ✅ Enable CORS (allow your Firebase site)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://house-of-prompts.web.app"],  # ✅ your real site
+    allow_origins=["*"],  # or ["https://house-of-prompts.web.app"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 class Article(BaseModel):
     article: str
@@ -36,10 +31,11 @@ class Article(BaseModel):
 @app.post("/analyze")
 async def analyze(article: Article):
     try:
+        # Tell the AI to respond strictly in JSON format
         prompt = f"""
         You are an AI that analyzes the credibility of news articles.
 
-        Return your answer strictly as a JSON object:
+        Return your answer **strictly as a JSON object** with the following keys:
         {{
           "credibility_score": "number out of 100",
           "summary": "short factual summary",
@@ -60,9 +56,11 @@ async def analyze(article: Article):
 
         raw = response.choices[0].message.content.strip()
 
+        # Try to extract valid JSON even if AI adds extra text
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
+            # Fallback: attempt to extract JSON substring
             start, end = raw.find("{"), raw.rfind("}")
             if start != -1 and end != -1:
                 data = json.loads(raw[start:end + 1])
@@ -86,33 +84,24 @@ async def analyze(article: Article):
 def home():
     return {"message": "✅ News Analyzer API with OpenRouter is running!"}
 
-GNEWS_API_KEY = os.getenv("2bad3eea46a5af8373e977e781fc5547")  # Set this in Render environment variables
+import requests
 
 @app.get("/news")
 async def get_news():
-    """
-    Fetch latest news from GNews API.
-    """
-    url = f"https://gnews.io/api/v4/top-headlines?lang=en&max=10&apikey={GNEWS_API_KEY}"
+    GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
+    categories = ["general", "world", "science", "nation"]
+    all_articles = []
+
     try:
-        res = requests.get(url)
-        data = res.json()
+        for cat in categories:
+            url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
+            res = requests.get(url)
+            if res.status_code == 200:
+                data = res.json()
+                if "articles" in data:
+                    all_articles.extend(data["articles"])
 
-        articles = []
-        for item in data.get("articles", []):
-            articles.append({
-                "title": item.get("title"),
-                "summary": item.get("description"),
-                "link": item.get("url")
-            })
+        return {"articles": all_articles}
 
-        return {"articles": articles}
     except Exception as e:
         return {"error": str(e)}
-
-
-
-
-
-
-
