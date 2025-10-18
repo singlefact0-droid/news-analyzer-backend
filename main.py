@@ -1,27 +1,42 @@
 # main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import requests
 import os
-import openai  # for OpenRouter Deepseek
+import openai
+import json
 
+# -----------------------------
+# App initialization
+# -----------------------------
 app = FastAPI()
 
+# CORS setup
+origins = [
+    "https://house-of-prompts.web.app",  # your frontend domain
+    "http://localhost:5500",             # optional local dev
+    "http://127.0.0.1:5500"
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# -----------------------------
+# API Keys and Clients
+# -----------------------------
+OPENROUTER_API_KEY = os.getenv(
+    "OPENROUTER_API_KEY",
+    "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"
+)
 
-# Environment variables
-OPENROUTER_API_KEY = os.getenv("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")
-
-# Initialize OpenAI client (OpenRouter)
+# Initialize OpenAI (OpenRouter)
 client = openai.OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY
@@ -34,8 +49,23 @@ class Article(BaseModel):
     article: str
 
 # -----------------------------
-# Endpoints
+# Exception handler (ensures CORS headers always present)
 # -----------------------------
+@app.exception_handler(Exception)
+async def all_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"error": str(exc)},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+# -----------------------------
+# Routes
+# -----------------------------
+@app.get("/")
+async def root():
+    return {"message": "News Analyzer API is running"}
+
 @app.get("/news")
 async def get_news():
     GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
@@ -72,28 +102,28 @@ async def get_wiki():
 async def analyze(article: Article):
     news_text = article.article
 
-    # Fetch Wikipedia summary
-    wiki_res = requests.get("https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events")
-    wiki_summary = wiki_res.json().get("extract", "")
-
-    prompt = f"""
-    You are an AI assistant analyzing a news article. Use the following Wikipedia summary as reference:
-
-    Wikipedia summary:
-    {wiki_summary}
-
-    News article:
-    {news_text}
-
-    Tasks:
-    1. Credibility score (0-100)
-    2. Short summary
-    3. Counterarguments
-
-    Return JSON with keys: credibility_score, summary, counterarguments
-    """
-
     try:
+        # Fetch Wikipedia summary
+        wiki_res = requests.get("https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events")
+        wiki_summary = wiki_res.json().get("extract", "")
+
+        prompt = f"""
+        You are an AI assistant analyzing a news article. Use the following Wikipedia summary as reference:
+
+        Wikipedia summary:
+        {wiki_summary}
+
+        News article:
+        {news_text}
+
+        Tasks:
+        1. Credibility score (0-100)
+        2. Short summary
+        3. Counterarguments
+
+        Return JSON with keys: credibility_score, summary, counterarguments
+        """
+
         response = client.chat.completions.create(
             model="deepseek/deepseek-r1:free",
             messages=[{"role": "user", "content": prompt}],
@@ -102,7 +132,7 @@ async def analyze(article: Article):
 
         message = response.choices[0].message.content
 
-        import json
+        # Attempt to parse JSON safely
         try:
             data = json.loads(message)
         except json.JSONDecodeError:
@@ -124,9 +154,3 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
-
-
-
-
-
-
