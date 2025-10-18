@@ -66,25 +66,32 @@ async def all_exception_handler(request: Request, exc: Exception):
 async def root():
     return {"message": "News Analyzer API is running"}
 
+from datetime import datetime, timedelta
+
+cache = {"data": None, "timestamp": None}
+
 @app.get("/news")
 async def get_news():
+    global cache
+    if cache["data"] and cache["timestamp"] > datetime.now() - timedelta(minutes=30):
+        return cache["data"]  # return cached data if recent
+
+    # otherwise fetch new
     GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
     categories = ["general", "world", "science", "nation"]
     all_articles = []
 
-    try:
-        for cat in categories:
-            url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
-            res = requests.get(url)
-            if res.status_code == 200:
-                data = res.json()
-                if "articles" in data:
-                    all_articles.extend(data["articles"])
+    for cat in categories:
+        url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
+        res = requests.get(url)
+        if res.status_code == 200:
+            data = res.json()
+            if "articles" in data:
+                all_articles.extend(data["articles"])
 
-        return {"articles": all_articles}
+    cache = {"data": {"articles": all_articles}, "timestamp": datetime.now()}
+    return {"articles": all_articles}
 
-    except Exception as e:
-        return {"error": str(e)}
 
 @app.get("/wiki")
 async def get_wiki():
@@ -154,3 +161,4 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
