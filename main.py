@@ -87,38 +87,27 @@ def home():
     return {"message": "✅ News Analyzer API with OpenRouter is running!"}
 
 @app.get("/wiki")
-async def get_wiki_articles(q: str = "India"):
+async def get_current_events():
     """
-    Fetch top 10 Wikipedia articles related to a query (default: India).
+    Fetch current events and discoveries from Wikipedia's Current Events Portal.
     """
     try:
-        url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={q}&utf8=&format=json&srlimit=10"
-        headers = {"User-Agent": "NewsAnalyzerBot/1.0 (https://house-of-prompts.web.app)"}
-        res = requests.get(url, headers=headers, timeout=10)
-
-        if res.status_code != 200:
-            return {"error": f"Wikipedia API returned {res.status_code}"}
-
+        url = "https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events"
+        res = requests.get(url)
         data = res.json()
 
-        if "query" not in data or "search" not in data["query"]:
-            return {"error": "Invalid response format from Wikipedia"}
+        # Wikipedia summaries are plain text; extract key parts
+        events = [{
+            "title": data.get("title", "Wikipedia Current Events"),
+            "summary": data.get("extract", "No summary available."),
+            "link": data.get("content_urls", {}).get("desktop", {}).get("page", "")
+        }]
 
-        articles = []
-        for item in data["query"]["search"]:
-            title = item["title"]
-            snippet = item.get("snippet", "").replace("<span class=\"searchmatch\">", "").replace("</span>", "")
-            link = f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
-            articles.append({
-                "title": title,
-                "summary": snippet,
-                "link": link
-            })
-
-        return {"articles": articles}
+        return {"articles": events}
 
     except Exception as e:
         return {"error": str(e)}
+
 
 
 
