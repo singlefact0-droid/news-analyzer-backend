@@ -1,62 +1,114 @@
+# main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from openai import OpenAI
+import requests
 import os
-import json
-
-# ✅ Load key from environment (Render injects it)
-OPENROUTER_API_KEY = os.getenv("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")
-
-# ✅ Initialize OpenRouter client
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
-)
+import openai  # for OpenRouter Deepseek
 
 app = FastAPI()
 
-# ✅ Enable CORS (allow your Firebase site)
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or ["https://house-of-prompts.web.app"]
+    allow_origins=["*"],  # Change to your frontend URL in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Environment variables
+GNEWS_API_KEY = os.getenv("2bad3eea46a5af8373e977e781fc5547")
+OPENROUTER_KEY = os.getenv("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")
+
+# Initialize OpenAI client (OpenRouter)
+client = openai.OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_KEY
+)
+
+# -----------------------------
+# Models
+# -----------------------------
 class Article(BaseModel):
     article: str
 
+# -----------------------------
+# Endpoints
+# -----------------------------
+@app.get("/news")
+async def get_news():
+    GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
+    categories = ["general", "world", "science", "nation"]
+    all_articles = []
+
+    try:
+        for cat in categories:
+            url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
+            res = requests.get(url)
+            if res.status_code == 200:
+                data = res.json()
+                if "articles" in data:
+                    all_articles.extend(data["articles"])
+
+        return {"articles": all_articles}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/wiki")
+async def get_wiki():
+    """Fetch Wikipedia Current Events summary"""
+    try:
+        url = "https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events"
+        res = requests.get(url)
+        data = res.json()
+        summary = data.get("extract", "")
+        return {"summary": summary}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.post("/analyze")
 async def analyze(article: Article):
+    """Analyze news article using Deepseek with Wikipedia context"""
+    news_text = article.article
+
+    # Fetch latest wiki summary
+    wiki_res = requests.get("https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events")
+    wiki_summary = wiki_res.json().get("extract", "")
+
+    # Construct prompt for Deepseek
+    prompt = f"""
+    You are an AI assistant analyzing a news article. Use the following Wikipedia summary as reference for current events:
+
+    Wikipedia summary:
+    {wiki_summary}
+
+    News article:
+    {news_text}
+
+    Tasks:
+    1. Give a credibility score out of 100.
+    2. Write a short summary.
+    3. Give counterarguments against claims in the article.
+
+    Output in JSON with keys: credibility_score, summary, counterarguments
+    """
+
     try:
-        # Tell the AI to respond strictly in JSON format
-        prompt = f"""
-        You are an AI that analyzes the credibility of news articles.
-
-        Return your answer **strictly as a JSON object** with the following keys:
-        {{
-          "credibility_score": "number out of 100",
-          "summary": "short factual summary",
-          "counterarguments": "logical counterpoints or fact-checking notes"
-        }}
-
-        Article:
-        {article.article}
-        """
-
         response = client.chat.completions.create(
             model="deepseek/deepseek-r1:free",
             messages=[
-                {"role": "system", "content": "You are a factual news credibility analyzer."},
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": prompt}
             ],
+            max_tokens=300
         )
 
-        raw = response.choices[0].message.content.strip()
+        # Deepseek returns structured message
+        message = response.choices[0].message.content
 
-        # Try to extract valid JSON even if AI adds extra text
+        # Attempt to parse JSON from Deepseek (user should output JSON)
+        import json
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
@@ -80,28 +132,3 @@ async def analyze(article: Article):
             "counterarguments": str(e)
         }
 
-@app.get("/")
-def home():
-    return {"message": "✅ News Analyzer API with OpenRouter is running!"}
-
-import requests
-
-@app.get("/news")
-async def get_news():
-    GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
-    categories = ["general", "world", "science", "nation"]
-    all_articles = []
-
-    try:
-        for cat in categories:
-            url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
-            res = requests.get(url)
-            if res.status_code == 200:
-                data = res.json()
-                if "articles" in data:
-                    all_articles.extend(data["articles"])
-
-        return {"articles": all_articles}
-
-    except Exception as e:
-        return {"error": str(e)}
