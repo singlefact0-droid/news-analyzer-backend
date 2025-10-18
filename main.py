@@ -23,11 +23,12 @@ app = FastAPI()
 # ✅ Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # replace with your domain later
+    allow_origins=["https://house-of-prompts.web.app"],  # ✅ your real site
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 class Article(BaseModel):
     article: str
@@ -100,3 +101,4 @@ async def get_wiki_articles(q: str = "India"):
         articles.append({"title": title, "summary": snippet, "link": link})
 
     return {"articles": articles}
+
