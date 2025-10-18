@@ -5,7 +5,7 @@ from openai import OpenAI
 import os
 import json
 import requests
-import re
+import feedparser
 
 # ✅ Load API key safely
 OPENROUTER_API_KEY = os.getenv("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")
@@ -106,6 +106,7 @@ async def get_current_events():
         return {"articles": events}
     except Exception as e:
         return {"error": str(e)}
+
 
 
 
