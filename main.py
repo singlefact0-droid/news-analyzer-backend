@@ -8,9 +8,9 @@ import requests
 import re
 
 # ✅ Load API key safely
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-if not OPENROUTER_API_KEY:
-    OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = os.getenv("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")
+
+
 
 # ✅ Initialize OpenRouter client
 client = OpenAI(
@@ -119,6 +119,7 @@ async def get_wiki_articles(q: str = "India"):
 
     except Exception as e:
         return {"error": str(e)}
+
 
 
 
