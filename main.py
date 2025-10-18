@@ -86,24 +86,24 @@ async def analyze(article: Article):
 def home():
     return {"message": "✅ News Analyzer API with OpenRouter is running!"}
 
-import httpx
+WIKI_RSS_URL = "https://en.wikipedia.org/w/index.php?title=Portal:Current_events&feed=rss"
 
 @app.get("/wiki")
 async def get_current_events():
+    """
+    Fetch individual current events from Wikipedia's Current Events RSS feed.
+    """
     try:
-        url = "https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events"
-        async with httpx.AsyncClient() as client:
-            res = await client.get(url)
-        data = res.json()
-
-        events = [{
-            "title": data.get("title", "Wikipedia Current Events"),
-            "summary": data.get("extract", "No summary available."),
-            "link": data.get("content_urls", {}).get("desktop", {}).get("page", "")
-        }]
-
+        feed = feedparser.parse(WIKI_RSS_URL)
+        events = []
+        for entry in feed.entries[:10]:  # get latest 10 events
+            events.append({
+                "title": entry.title,
+                "summary": entry.summary,
+                "link": entry.link,
+                "published": entry.published
+            })
         return {"articles": events}
-
     except Exception as e:
         return {"error": str(e)}
 
