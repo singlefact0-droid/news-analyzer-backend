@@ -18,13 +18,12 @@ app.add_middleware(
 )
 
 # Environment variables
-GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
-OPENROUTER_KEY = os.getenv("OPENAI_API_KEY")
+OPENROUTER_API_KEY = os.getenv("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")
 
 # Initialize OpenAI client (OpenRouter)
 client = openai.OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_KEY
+    api_key=OPENROUTER_API_KEY
 )
 
 # -----------------------------
@@ -124,6 +123,7 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
 
 
 
