@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 import json
+import requests
 
 # ✅ Load key from environment (Render injects it)
 OPENROUTER_API_KEY = os.getenv("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")
@@ -84,27 +85,26 @@ async def analyze(article: Article):
 def home():
     return {"message": "✅ News Analyzer API with OpenRouter is running!"}
 
-import requests
 
-@app.get("/news")
-async def get_news():
-    GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
-    categories = ["general", "world", "science", "nation"]
-    all_articles = []
 
-    try:
-        for cat in categories:
-            url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
-            res = requests.get(url)
-            if res.status_code == 200:
-                data = res.json()
-                if "articles" in data:
-                    all_articles.extend(data["articles"])
+@app.get("/wiki")
+async def get_wiki_articles(q: str = "India"):
+    """
+    Fetch top 10 Wikipedia articles related to a query (default: India).
+    """
+    url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={q}&utf8=&format=json&srlimit=10"
+    res = requests.get(url)
+    data = res.json()
 
-        return {"articles": all_articles}
+    articles = []
+    for item in data.get("query", {}).get("search", []):
+        title = item["title"]
+        snippet = item["snippet"].replace("<span class=\"searchmatch\">", "").replace("</span>", "")
+        link = f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
+        articles.append({"title": title, "summary": snippet, "link": link})
 
-    except Exception as e:
-        return {"error": str(e)}
+    return {"articles": articles}
+
 
 
 
