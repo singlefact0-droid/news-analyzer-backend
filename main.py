@@ -86,24 +86,27 @@ async def analyze(article: Article):
 def home():
     return {"message": "✅ News Analyzer API with OpenRouter is running!"}
 
-WIKI_RSS_URL = "https://en.wikipedia.org/w/index.php?title=Portal:Current_events&feed=rss"
+GNEWS_API_KEY = os.getenv("2bad3eea46a5af8373e977e781fc5547")  # Set this in Render environment variables
 
-@app.get("/wiki")
-async def get_current_events():
+@app.get("/news")
+async def get_news():
     """
-    Fetch individual current events from Wikipedia's Current Events RSS feed.
+    Fetch latest news from GNews API.
     """
+    url = f"https://gnews.io/api/v4/top-headlines?lang=en&max=10&apikey={GNEWS_API_KEY}"
     try:
-        feed = feedparser.parse(WIKI_RSS_URL)
-        events = []
-        for entry in feed.entries[:10]:  # get latest 10 events
-            events.append({
-                "title": entry.title,
-                "summary": entry.summary,
-                "link": entry.link,
-                "published": entry.published
+        res = requests.get(url)
+        data = res.json()
+
+        articles = []
+        for item in data.get("articles", []):
+            articles.append({
+                "title": item.get("title"),
+                "summary": item.get("description"),
+                "link": item.get("url")
             })
-        return {"articles": events}
+
+        return {"articles": articles}
     except Exception as e:
         return {"error": str(e)}
 
