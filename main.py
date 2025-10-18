@@ -88,17 +88,37 @@ def home():
 
 @app.get("/wiki")
 async def get_wiki_articles(q: str = "India"):
-    """Fetch top 10 Wikipedia articles related to a query (default: India)."""
-    url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={q}&utf8=&format=json&srlimit=10"
-    res = requests.get(url)
-    data = res.json()
+    """
+    Fetch top 10 Wikipedia articles related to a query (default: India).
+    """
+    try:
+        url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={q}&utf8=&format=json&srlimit=10"
+        headers = {"User-Agent": "NewsAnalyzerBot/1.0 (https://house-of-prompts.web.app)"}
+        res = requests.get(url, headers=headers, timeout=10)
 
-    articles = []
-    for item in data.get("query", {}).get("search", []):
-        title = item["title"]
-        snippet = re.sub(r"<.*?>", "", item["snippet"])
-        link = f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
-        articles.append({"title": title, "summary": snippet, "link": link})
+        if res.status_code != 200:
+            return {"error": f"Wikipedia API returned {res.status_code}"}
 
-    return {"articles": articles}
+        data = res.json()
+
+        if "query" not in data or "search" not in data["query"]:
+            return {"error": "Invalid response format from Wikipedia"}
+
+        articles = []
+        for item in data["query"]["search"]:
+            title = item["title"]
+            snippet = item.get("snippet", "").replace("<span class=\"searchmatch\">", "").replace("</span>", "")
+            link = f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
+            articles.append({
+                "title": title,
+                "summary": snippet,
+                "link": link
+            })
+
+        return {"articles": articles}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
 
