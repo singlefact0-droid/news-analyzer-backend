@@ -18,8 +18,8 @@ app.add_middleware(
 )
 
 # Environment variables
-GNEWS_API_KEY = os.getenv("2bad3eea46a5af8373e977e781fc5547")
-OPENROUTER_KEY = os.getenv("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")
+GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
+OPENROUTER_KEY = os.getenv("OPENAI_API_KEY")
 
 # Initialize OpenAI client (OpenRouter)
 client = openai.OpenAI(
@@ -70,16 +70,14 @@ async def get_wiki():
 
 @app.post("/analyze")
 async def analyze(article: Article):
-    """Analyze news article using Deepseek with Wikipedia context"""
     news_text = article.article
 
-    # Fetch latest wiki summary
+    # Fetch Wikipedia summary
     wiki_res = requests.get("https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events")
     wiki_summary = wiki_res.json().get("extract", "")
 
-    # Construct prompt for Deepseek
     prompt = f"""
-    You are an AI assistant analyzing a news article. Use the following Wikipedia summary as reference for current events:
+    You are an AI assistant analyzing a news article. Use the following Wikipedia summary as reference:
 
     Wikipedia summary:
     {wiki_summary}
@@ -88,39 +86,34 @@ async def analyze(article: Article):
     {news_text}
 
     Tasks:
-    1. Give a credibility score out of 100.
-    2. Write a short summary.
-    3. Give counterarguments against claims in the article.
+    1. Credibility score (0-100)
+    2. Short summary
+    3. Counterarguments
 
-    Output in JSON with keys: credibility_score, summary, counterarguments
+    Return JSON with keys: credibility_score, summary, counterarguments
     """
 
     try:
         response = client.chat.completions.create(
             model="deepseek/deepseek-r1:free",
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "user", "content": prompt}],
             max_tokens=300
         )
 
-        # Deepseek returns structured message
         message = response.choices[0].message.content
 
-        # Attempt to parse JSON from Deepseek (user should output JSON)
         import json
         try:
-            data = json.loads(raw)
+            data = json.loads(message)
         except json.JSONDecodeError:
-            # Fallback: attempt to extract JSON substring
-            start, end = raw.find("{"), raw.rfind("}")
+            start, end = message.find("{"), message.rfind("}")
             if start != -1 and end != -1:
-                data = json.loads(raw[start:end + 1])
+                data = json.loads(message[start:end + 1])
             else:
                 data = {
                     "credibility_score": "N/A",
-                    "summary": raw,
-                    "counterarguments": "Could not parse structured data."
+                    "summary": message,
+                    "counterarguments": "Could not parse JSON"
                 }
 
         return data
@@ -131,4 +124,6 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
+
 
