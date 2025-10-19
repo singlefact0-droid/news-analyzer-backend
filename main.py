@@ -93,16 +93,15 @@ async def get_news():
     cache = {"data": {"articles": all_articles}, "timestamp": datetime.now()}
     return {"articles": all_articles}
 
-
-
-
 @app.post("/analyze")
 async def analyze(article: Article):
     news_text = article.article
 
     try:
-        # DuckDuckGo live data
-        duck_res = requests.get(f"https://api.duckduckgo.com/?q={news_text[:80]}&format=json&no_html=1&skip_disambig=1")
+        # --- DuckDuckGo Live Search ---
+        duck_res = requests.get(
+            f"https://api.duckduckgo.com/?q={news_text[:80]}&format=json&no_html=1&skip_disambig=1"
+        )
         duck_data = duck_res.json()
         related = duck_data.get("RelatedTopics", [])
         duck_summary = " ".join([r.get("Text", "") for r in related[:5]])
@@ -110,25 +109,26 @@ async def analyze(article: Article):
         if not duck_summary.strip():
             duck_summary = "No live search data available."
 
+        # --- Build AI Prompt ---
         prompt = f"""
         You are a News Credibility Analyzer.
-        Use the live DuckDuckGo results to verify the truthfulness.
+        Use the live DuckDuckGo results to verify how factual and up-to-date the article is.
 
-    
         DuckDuckGo current data:
         {duck_summary}
 
         News article:
         {news_text}
 
-        Return JSON in this exact format:
+        Return JSON in this exact format only:
         {{
-            "credibility_score": (0-100),
-            "summary": "...",
-            "counterarguments": "..."
+            "credibility_score": <0-100>,
+            "summary": "<short objective summary>",
+            "counterarguments": "<key doubts or alternate views>"
         }}
         """
 
+        # --- Call DeepSeek via OpenRouter ---
         response = client.chat.completions.create(
             model="deepseek/deepseek-r1:free",
             messages=[{"role": "user", "content": prompt}],
@@ -137,37 +137,30 @@ async def analyze(article: Article):
 
         raw = response.choices[0].message.content.strip()
 
-        # Try extracting JSON
+        # --- Extract JSON safely ---
+        clean_raw = re.sub(r"```(json)?", "", raw).strip()
+        match = re.search(r"\{[\s\S]*\}", clean_raw)
 
+        if match:
+            try:
+                data = json.loads(match.group(0))
+                return data
+            except json.JSONDecodeError:
+                return {
+                    "credibility_score": "N/A",
+                    "summary": clean_raw,
+                    "counterarguments": "JSON formatting issue."
+                }
+        else:
+            return {
+                "credibility_score": "N/A",
+                "summary": clean_raw,
+                "counterarguments": "No valid JSON detected."
+            }
 
-# Clean markdown code blocks and extract JSON
-clean_raw = re.sub(r"```(json)?", "", raw).strip()
-match = re.search(r"\{[\s\S]*\}", clean_raw)
-
-if match:
-    try:
-        return json.loads(match.group(0))
-    except json.JSONDecodeError:
+    except Exception as e:
         return {
-            "credibility_score": "N/A",
-            "summary": clean_raw,
-            "counterarguments": "JSON formatting issue."
+            "credibility_score": "Error",
+            "summary": "Could not analyze article.",
+            "counterarguments": str(e)
         }
-else:
-    return {
-        "credibility_score": "N/A",
-        "summary": clean_raw,
-        "counterarguments": "No valid JSON detected."
-    }
-
-
-
-
-
-
-
-
-
-
-
-
