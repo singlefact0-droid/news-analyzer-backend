@@ -111,11 +111,9 @@ async def analyze(article: Article):
 
         prompt = f"""
         You are a News Credibility Analyzer.
-        Use the Wikipedia current events and live DuckDuckGo results to verify the truthfulness.
+        Use the live DuckDuckGo results to verify the truthfulness.
 
-        Wikipedia summary:
-        {wiki_summary}
-
+    
         DuckDuckGo current data:
         {duck_summary}
 
@@ -155,6 +153,7 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
 
 
 
