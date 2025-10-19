@@ -100,10 +100,6 @@ async def analyze(article: Article):
     news_text = article.article
 
     try:
-        # Fetch fresh data
-        wiki_res = requests.get("https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events")
-        wiki_summary = wiki_res.json().get("extract", "")
-
         # DuckDuckGo live data
         duck_res = requests.get(f"https://api.duckduckgo.com/?q={news_text[:80]}&format=json&no_html=1&skip_disambig=1")
         duck_data = duck_res.json()
@@ -159,6 +155,7 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
 
 
 
