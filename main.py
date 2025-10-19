@@ -100,67 +100,58 @@ async def analyze(article: Article):
     news_text = article.article
 
     try:
-        # --- Step 1: Get Wikipedia current events summary ---
+        # Fetch fresh data
         wiki_res = requests.get("https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events")
         wiki_summary = wiki_res.json().get("extract", "")
 
-        # --- Step 2: Fetch DuckDuckGo search results ---
-        search_url = f"https://api.duckduckgo.com/?q={news_text[:80]}&format=json&no_redirect=1&no_html=1"
-        ddg_res = requests.get(search_url)
-        ddg_data = ddg_res.json()
-        ddg_snippets = []
+        # DuckDuckGo live data
+        duck_res = requests.get(f"https://api.duckduckgo.com/?q={news_text[:80]}&format=json&no_html=1&skip_disambig=1")
+        duck_data = duck_res.json()
+        related = duck_data.get("RelatedTopics", [])
+        duck_summary = " ".join([r.get("Text", "") for r in related[:5]])
 
-        # Collect up to 3 relevant snippets
-        for topic in ddg_data.get("RelatedTopics", [])[:3]:
-            if "Text" in topic:
-                ddg_snippets.append(topic["Text"])
+        if not duck_summary.strip():
+            duck_summary = "No live search data available."
 
-        duckduck_summary = " ".join(ddg_snippets)
-
-        # --- Step 3: Combine data sources ---
         prompt = f"""
-        You are a real-time news credibility analyst.
-        Use the following info for context and verification.
+        You are a News Credibility Analyzer.
+        Use the Wikipedia current events and live DuckDuckGo results to verify the truthfulness.
 
-        WIKIPEDIA SUMMARY (recent events):
+        Wikipedia summary:
         {wiki_summary}
 
-        DUCKDUCKGO LIVE RESULTS:
-        {duckduck_summary}
+        DuckDuckGo current data:
+        {duck_summary}
 
-        NEWS ARTICLE:
+        News article:
         {news_text}
 
-        TASKS:
-        1. Give a credibility score (0-100)
-        2. Write a short, unbiased summary
-        3. Provide counterarguments or alternative viewpoints
-
-        Output valid JSON with keys: credibility_score, summary, counterarguments.
+        Return JSON in this exact format:
+        {{
+            "credibility_score": (0-100),
+            "summary": "...",
+            "counterarguments": "..."
+        }}
         """
 
-        # --- Step 4: Ask DeepSeek ---
         response = client.chat.completions.create(
             model="deepseek/deepseek-r1:free",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=300
+            max_tokens=400
         )
 
         raw = response.choices[0].message.content.strip()
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            start, end = raw.find("{"), raw.rfind("}")
-            if start != -1 and end != -1:
-                data = json.loads(raw[start:end + 1])
-            else:
-                data = {
-                    "credibility_score": "N/A",
-                    "summary": raw,
-                    "counterarguments": "Could not parse structured data."
-                }
 
-        return data
+        # Try extracting JSON
+        start, end = raw.find("{"), raw.rfind("}")
+        if start != -1 and end != -1:
+            return json.loads(raw[start:end + 1])
+        else:
+            return {
+                "credibility_score": "N/A",
+                "summary": raw or "Could not analyze article.",
+                "counterarguments": "No valid JSON returned."
+            }
 
     except Exception as e:
         return {
@@ -168,6 +159,8 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
+
 
 
 
