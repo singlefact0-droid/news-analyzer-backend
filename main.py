@@ -112,6 +112,7 @@ async def analyze(article: Article):
         prompt = f"""
         You are a News Credibility Analyzer.
         Use the live DuckDuckGo results to verify how factual and up-to-date the article is.
+        It is year 2025 and since you donot have realtime data, use the duckduckgo to analyse the article.
 
         DuckDuckGo current data:
         {duck_summary}
@@ -163,4 +164,5 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
 
