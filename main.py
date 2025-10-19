@@ -7,6 +7,7 @@ import requests
 import os
 import openai
 import json
+import re
 
 # -----------------------------
 # App initialization
@@ -137,7 +138,7 @@ async def analyze(article: Article):
         raw = response.choices[0].message.content.strip()
 
         # Try extracting JSON
-     import re
+
 
 # Clean markdown code blocks and extract JSON
 clean_raw = re.sub(r"```(json)?", "", raw).strip()
@@ -158,6 +159,7 @@ else:
         "summary": clean_raw,
         "counterarguments": "No valid JSON detected."
     }
+
 
 
 
