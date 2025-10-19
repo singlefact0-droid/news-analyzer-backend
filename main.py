@@ -17,8 +17,7 @@ app = FastAPI()
 # CORS setup
 origins = [
     "https://house-of-prompts.web.app",  # your frontend domain
-    "http://localhost:5500",             # optional local dev
-    "http://127.0.0.1:5500"
+    "https://house-of-prompts.firebaseapp.com"
 ]
 
 app.add_middleware(
@@ -164,3 +163,4 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
