@@ -137,22 +137,28 @@ async def analyze(article: Article):
         raw = response.choices[0].message.content.strip()
 
         # Try extracting JSON
-        start, end = raw.find("{"), raw.rfind("}")
-        if start != -1 and end != -1:
-            return json.loads(raw[start:end + 1])
-        else:
-            return {
-                "credibility_score": "N/A",
-                "summary": raw or "Could not analyze article.",
-                "counterarguments": "No valid JSON returned."
-            }
+     import re
 
-    except Exception as e:
+# Clean markdown code blocks and extract JSON
+clean_raw = re.sub(r"```(json)?", "", raw).strip()
+match = re.search(r"\{[\s\S]*\}", clean_raw)
+
+if match:
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError:
         return {
-            "credibility_score": "Error",
-            "summary": "Could not analyze article.",
-            "counterarguments": str(e)
+            "credibility_score": "N/A",
+            "summary": clean_raw,
+            "counterarguments": "JSON formatting issue."
         }
+else:
+    return {
+        "credibility_score": "N/A",
+        "summary": clean_raw,
+        "counterarguments": "No valid JSON detected."
+    }
+
 
 
 
