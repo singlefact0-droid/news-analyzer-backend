@@ -31,7 +31,7 @@ app.add_middleware(
 # -----------------------------
 # API Keys and Clients
 # -----------------------------
-OPENROUTER_API_KEY = os.getenv("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")
+OPENROUTER_API_KEY = "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"
 
 # Initialize OpenAI (OpenRouter)
 client = openai.OpenAI(
@@ -158,6 +158,7 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
 
 
 
