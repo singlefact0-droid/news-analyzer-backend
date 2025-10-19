@@ -32,6 +32,7 @@ app.add_middleware(
 # API Keys and Clients
 # -----------------------------
 OPENROUTER_API_KEY = "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"
+GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
 
 # Initialize OpenAI (OpenRouter)
 client = openai.OpenAI(
@@ -69,12 +70,14 @@ cache = {"data": None, "timestamp": None}
 
 @app.get("/news")
 async def get_news():
+    """
+    Fetch top GNews articles for selected categories.
+    Cached for 30 minutes to reduce API usage.
+    """
     global cache
     if cache["data"] and cache["timestamp"] > datetime.now() - timedelta(minutes=30):
-        return cache["data"]  # return cached data if recent
+        return cache["data"]
 
-    # otherwise fetch new
-    GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
     categories = ["general", "world", "science", "nation"]
     all_articles = []
 
@@ -88,6 +91,7 @@ async def get_news():
 
     cache = {"data": {"articles": all_articles}, "timestamp": datetime.now()}
     return {"articles": all_articles}
+
 
 
 
@@ -164,6 +168,7 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
 
 
 
