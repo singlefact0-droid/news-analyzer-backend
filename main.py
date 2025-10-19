@@ -134,20 +134,21 @@ async def analyze(article: Article):
             max_tokens=300
         )
 
-        message = response.choices[0].message.content
+        raw = response.choices[0].message.content.strip()
 
-        # Attempt to parse JSON safely
+        # Try to extract valid JSON even if AI adds extra text
         try:
-            data = json.loads(message)
+            data = json.loads(raw)
         except json.JSONDecodeError:
-            start, end = message.find("{"), message.rfind("}")
+            # Fallback: attempt to extract JSON substring
+            start, end = raw.find("{"), raw.rfind("}")
             if start != -1 and end != -1:
-                data = json.loads(message[start:end + 1])
+                data = json.loads(raw[start:end + 1])
             else:
                 data = {
                     "credibility_score": "N/A",
-                    "summary": message,
-                    "counterarguments": "Could not parse JSON"
+                    "summary": raw,
+                    "counterarguments": "Could not parse structured data."
                 }
 
         return data
