@@ -90,44 +90,52 @@ async def get_news():
     return {"articles": all_articles}
 
 
-@app.get("/wiki")
-async def get_wiki():
-    """Fetch Wikipedia Current Events summary"""
-    try:
-        url = "https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events"
-        res = requests.get(url)
-        data = res.json()
-        summary = data.get("extract", "")
-        return {"summary": summary}
-    except Exception as e:
-        return {"error": str(e)}
 
 @app.post("/analyze")
 async def analyze(article: Article):
     news_text = article.article
 
     try:
-        # Fetch Wikipedia summary
+        # --- Step 1: Get Wikipedia current events summary ---
         wiki_res = requests.get("https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events")
         wiki_summary = wiki_res.json().get("extract", "")
 
-        prompt = f"""
-        You are an AI assistant analyzing a news article. Use the following Wikipedia summary as reference:
+        # --- Step 2: Fetch DuckDuckGo search results ---
+        search_url = f"https://api.duckduckgo.com/?q={news_text[:80]}&format=json&no_redirect=1&no_html=1"
+        ddg_res = requests.get(search_url)
+        ddg_data = ddg_res.json()
+        ddg_snippets = []
 
-        Wikipedia summary:
+        # Collect up to 3 relevant snippets
+        for topic in ddg_data.get("RelatedTopics", [])[:3]:
+            if "Text" in topic:
+                ddg_snippets.append(topic["Text"])
+
+        duckduck_summary = " ".join(ddg_snippets)
+
+        # --- Step 3: Combine data sources ---
+        prompt = f"""
+        You are a real-time news credibility analyst.
+        Use the following info for context and verification.
+
+        WIKIPEDIA SUMMARY (recent events):
         {wiki_summary}
 
-        News article:
+        DUCKDUCKGO LIVE RESULTS:
+        {duckduck_summary}
+
+        NEWS ARTICLE:
         {news_text}
 
-        Tasks:
-        1. Credibility score (0-100)
-        2. Short summary
-        3. Counterarguments
+        TASKS:
+        1. Give a credibility score (0-100)
+        2. Write a short, unbiased summary
+        3. Provide counterarguments or alternative viewpoints
 
-        Return JSON with keys: credibility_score, summary, counterarguments
+        Output valid JSON with keys: credibility_score, summary, counterarguments.
         """
 
+        # --- Step 4: Ask DeepSeek ---
         response = client.chat.completions.create(
             model="deepseek/deepseek-r1:free",
             messages=[{"role": "user", "content": prompt}],
@@ -135,12 +143,9 @@ async def analyze(article: Article):
         )
 
         raw = response.choices[0].message.content.strip()
-
-        # Try to extract valid JSON even if AI adds extra text
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            # Fallback: attempt to extract JSON substring
             start, end = raw.find("{"), raw.rfind("}")
             if start != -1 and end != -1:
                 data = json.loads(raw[start:end + 1])
@@ -159,6 +164,7 @@ async def analyze(article: Article):
             "summary": "Could not analyze article.",
             "counterarguments": str(e)
         }
+
 
 
 
