@@ -9,6 +9,7 @@ import json
 import openai
 import aiohttp
 from datetime import datetime, timedelta
+import asyncio
 
 # -----------------------------
 # FastAPI Initialization
@@ -146,35 +147,45 @@ async def analyze(article: Article):
         }
 
 
-cache = {"data": None, "timestamp": None}
 
-GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
-categories = ["general", "world", "science", "nation"]
+
 
 @app.get("/news")
-async def get_news():
-    global cache
-    # Return cached data if recent
-    if cache["data"] and cache["timestamp"] > datetime.now() - timedelta(minutes=30):
-        return cache["data"]
-
+async def get_news(request: Request):
+    """Fetch top headlines asynchronously, with optional search query"""
+    GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
+    base_url = "https://gnews.io/api/v4/top-headlines"
+    query = request.query_params.get("q", "")
+    categories = ["general", "world", "science", "nation"]
     all_articles = []
 
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        for cat in categories:
-            url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
-            tasks.append(session.get(url))
+    try:
+        async with aiohttp.ClientSession() as session:
+            tasks = []
+            for cat in categories:
+                params = {
+                    "category": cat,
+                    "lang": "en",
+                    "country": "in",
+                    "max": 5,
+                    "apikey": GNEWS_API_KEY
+                }
+                if query:
+                    params["q"] = query
+                tasks.append(session.get(base_url, params=params))
 
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
+            responses = await asyncio.gather(*tasks)
 
-        for res in responses:
-            if isinstance(res, Exception):
-                continue
-            data = await res.json()
-            articles = data.get("articles", [])
-            all_articles.extend(articles)
+            for res in responses:
+                if res.status == 200:
+                    data = await res.json()
+                    if "articles" in data:
+                        all_articles.extend(data["articles"])
+                else:
+                    print(f"⚠️ GNews API failed with status {res.status}")
 
-    cache = {"data": {"articles": all_articles}, "timestamp": datetime.now()}
-    return {"articles": all_articles}
+        return {"articles": all_articles}
 
+    except Exception as e:
+        print("❌ Error in /news:", e)
+        return {"error": str(e)}
