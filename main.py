@@ -5,20 +5,22 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import requests
 import os
-import openai
 import json
-import re
+import openai
 
 # -----------------------------
-# App initialization
+# FastAPI Initialization
 # -----------------------------
 app = FastAPI()
 
-# CORS setup
+# CORS (add your frontend domains here)
 origins = [
-    "https://house-of-prompts.web.app",  # your frontend domain
+    "https://house-of-prompts.web.app",
+    "http://localhost:5500",
     "https://house-of-prompts.firebaseapp.com",
-    "https://counter-8d610.web.app"
+    "counter-8d610.web.app",
+    "counter-8d610.firebaseapp.com",
+
 ]
 
 app.add_middleware(
@@ -30,12 +32,20 @@ app.add_middleware(
 )
 
 # -----------------------------
-# API Keys and Clients
+# API Keys
 # -----------------------------
-OPENROUTER_API_KEY = "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"
-GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
+OPENROUTER_API_KEY = os.getenv(
+    "OPENROUTER_API_KEY",
+    "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"
+)
+GOOGLE_FACTCHECK_API_KEY = os.getenv(
+    "GOOGLE_FACTCHECK_API_KEY",
+    "AIzaSyDSuKW5Qv2nmslE6AwMISP4WpHqwdBfdHA"
+)
 
-# Initialize OpenAI (OpenRouter)
+# -----------------------------
+# OpenRouter Client (DeepSeek)
+# -----------------------------
 client = openai.OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY
@@ -48,10 +58,10 @@ class Article(BaseModel):
     article: str
 
 # -----------------------------
-# Exception handler (ensures CORS headers always present)
+# Exception Handler
 # -----------------------------
 @app.exception_handler(Exception)
-async def all_exception_handler(request: Request, exc: Exception):
+async def exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"error": str(exc)},
@@ -62,109 +72,73 @@ async def all_exception_handler(request: Request, exc: Exception):
 # Routes
 # -----------------------------
 @app.get("/")
-async def root():
-    return {"message": "News Analyzer API is running"}
+async def home():
+    return {"message": "AI News Analyzer is running."}
 
-from datetime import datetime, timedelta
-
-cache = {"data": None, "timestamp": None}
-
-@app.get("/news")
-async def get_news():
-    """
-    Fetch top GNews articles for selected categories.
-    Cached for 30 minutes to reduce API usage.
-    """
-    global cache
-    if cache["data"] and cache["timestamp"] > datetime.now() - timedelta(minutes=30):
-        return cache["data"]
-
-    categories = ["general", "world", "science", "nation"]
-    all_articles = []
-
-    for cat in categories:
-        url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
-        res = requests.get(url)
-        if res.status_code == 200:
-            data = res.json()
-            if "articles" in data:
-                all_articles.extend(data["articles"])
-
-    cache = {"data": {"articles": all_articles}, "timestamp": datetime.now()}
-    return {"articles": all_articles}
 
 @app.post("/analyze")
 async def analyze(article: Article):
     news_text = article.article
 
     try:
-        # --- DuckDuckGo Live Search ---
-        duck_res = requests.get(
-            f"https://api.duckduckgo.com/?q={news_text[:80]}&format=json&no_html=1&skip_disambig=1"
+        # Step 1: FACT CHECK
+        factcheck_url = (
+            f"https://factchecktools.googleapis.com/v1alpha1/claims:search"
+            f"?query={news_text[:200]}&key={GOOGLE_FACTCHECK_API_KEY}"
         )
-        duck_data = duck_res.json()
-        related = duck_data.get("RelatedTopics", [])
-        duck_summary = " ".join([r.get("Text", "") for r in related[:5]])
+        fact_res = requests.get(factcheck_url)
+        fact_data = fact_res.json()
 
-        if not duck_summary.strip():
-            duck_summary = "No live search data available."
+        credibility_score = "Unknown"
+        credibility_label = "No data found"
 
-        # --- Build AI Prompt ---
+        if "claims" in fact_data and len(fact_data["claims"]) > 0:
+            claim = fact_data["claims"][0]
+            rating = claim.get("textualRating", "")
+            credibility_label = rating or "Not rated"
+
+            if "True" in rating:
+                credibility_score = 90
+            elif "Mostly" in rating or "Partly" in rating:
+                credibility_score = 60
+            elif "False" in rating:
+                credibility_score = 25
+            elif "Unproven" in rating or "Misleading" in rating:
+                credibility_score = 40
+            else:
+                credibility_score = 50  # Neutral
+
+        # Step 2: AI ANALYSIS WITH DEEPSEEK
         prompt = f"""
-        You are a News Credibility Analyzer.
-        Use the live DuckDuckGo results to verify how factual and up-to-date the article is.
-        It is year 2025 and since you donot have realtime data, use the duckduckgo to analyse the article.
+        Analyze the following article. You are not limited by time or date — assume all events have occurred as described.
 
-        DuckDuckGo current data:
-        {duck_summary}
-
-        News article:
+        Article:
         {news_text}
 
-        Return JSON in this exact format only:
-        {{
-            "credibility_score": <0-100>,
-            "summary": "<short objective summary>",
-            "counterarguments": "<key doubts or alternate views>"
-        }}
+        Fact-check result: The claim was rated '{credibility_label}' with a credibility score of {credibility_score}.
+
+        Tasks:
+        1. Provide a concise and neutral summary of the article.
+        2. Offer intelligent counterarguments or alternative viewpoints, without referencing the current date or saying that events have not happened.
         """
 
-        # --- Call DeepSeek via OpenRouter ---
         response = client.chat.completions.create(
             model="deepseek/deepseek-r1:free",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=400
         )
 
-        raw = response.choices[0].message.content.strip()
+        analysis = response.choices[0].message.content.strip()
 
-        # --- Extract JSON safely ---
-        clean_raw = re.sub(r"```(json)?", "", raw).strip()
-        match = re.search(r"\{[\s\S]*\}", clean_raw)
-
-        if match:
-            try:
-                data = json.loads(match.group(0))
-                return data
-            except json.JSONDecodeError:
-                return {
-                    "credibility_score": "N/A",
-                    "summary": clean_raw,
-                    "counterarguments": "JSON formatting issue."
-                }
-        else:
-            return {
-                "credibility_score": "N/A",
-                "summary": clean_raw,
-                "counterarguments": "No valid JSON detected."
-            }
+        return {
+            "credibility_score": credibility_score,
+            "fact_check_label": credibility_label,
+            "summary_and_counterarguments": analysis
+        }
 
     except Exception as e:
         return {
             "credibility_score": "Error",
-            "summary": "Could not analyze article.",
-            "counterarguments": str(e)
+            "summary_and_counterarguments": "Could not analyze article.",
+            "fact_check_label": str(e)
         }
-
-
-
