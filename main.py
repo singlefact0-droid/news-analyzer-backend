@@ -7,6 +7,8 @@ import requests
 import os
 import json
 import openai
+import aiohttp
+from datetime import datetime, timedelta
 
 # -----------------------------
 # FastAPI Initialization
@@ -142,3 +144,37 @@ async def analyze(article: Article):
             "summary_and_counterarguments": "Could not analyze article.",
             "fact_check_label": str(e)
         }
+
+
+cache = {"data": None, "timestamp": None}
+
+GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
+categories = ["general", "world", "science", "nation"]
+
+@app.get("/news")
+async def get_news():
+    global cache
+    # Return cached data if recent
+    if cache["data"] and cache["timestamp"] > datetime.now() - timedelta(minutes=30):
+        return cache["data"]
+
+    all_articles = []
+
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for cat in categories:
+            url = f"https://gnews.io/api/v4/top-headlines?category={cat}&lang=en&country=in&max=5&apikey={GNEWS_API_KEY}"
+            tasks.append(session.get(url))
+
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for res in responses:
+            if isinstance(res, Exception):
+                continue
+            data = await res.json()
+            articles = data.get("articles", [])
+            all_articles.extend(articles)
+
+    cache = {"data": {"articles": all_articles}, "timestamp": datetime.now()}
+    return {"articles": all_articles}
+
