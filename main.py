@@ -106,21 +106,28 @@ async def analyze(article: Article):
 
         # Step 2: AI Analysis using DeepSeek (or GPT-4o-mini)
         prompt = f"""
-        You are a factual AI news analyzer.
-        Below is a claim or article excerpt. Check its factual accuracy using the Wikipedia summary provided.
+You are a factual AI news analyzer.
+Below is a claim or article excerpt. Check its factual accuracy using the Wikipedia summary provided.
 
-        Article:
-        {news_text}
+Article:
+{news_text}
 
-        Wikipedia summary:
-        {wiki_summary}
+Wikipedia summary:
+{wiki_summary}
 
-        Tasks:
-        1. Determine if the article's main claim aligns with Wikipedia's information (True / False / Unclear).
-        2. Give a credibility score (0–100) based on accuracy.
-        3. Provide a concise, neutral summary of the article.
-        4. Offer counterarguments or alternative perspectives neutrally.
-        """
+Tasks:
+1. Determine if the article's main claim aligns with Wikipedia's information (True / False / Unclear).
+2. Give a credibility score (0–100) based on accuracy.
+3. Provide a concise, neutral summary of the article.
+4. Offer counterarguments or alternative perspectives neutrally.
+
+Return your answer strictly as a JSON object:
+{{
+    "credibility_score": number,
+    "summary": "text",
+    "counterarguments": "text"
+}}
+"""
 
         response = client.chat.completions.create(
             model="deepseek/deepseek-r1:free",
@@ -128,18 +135,32 @@ async def analyze(article: Article):
             max_tokens=400
         )
 
-        analysis = response.choices[0].message.content.strip()
+        analysis_text = response.choices[0].message.content.strip()
 
+        # Attempt to parse AI response as JSON
+        try:
+            analysis_json = json.loads(analysis_text)
+        except:
+            analysis_json = {
+                "credibility_score": "Unavailable",
+                "summary": "No summary available.",
+                "counterarguments": "No counterarguments found."
+            }
+
+        # Return structured result for frontend
         return {
-            "wikipedia_summary": wiki_summary,
-            "summary_and_counterarguments": analysis
+            **analysis_json,
+            "wikipedia_summary": wiki_summary
         }
 
     except Exception as e:
         return {
-            "summary_and_counterarguments": "Could not analyze article.",
+            "credibility_score": "Error",
+            "summary": "Could not analyze article.",
+            "counterarguments": "Please check backend or API key.",
             "wikipedia_summary": str(e)
         }
+
 
 # -----------------------------
 # News Fetch Route
@@ -202,4 +223,5 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
+
 
