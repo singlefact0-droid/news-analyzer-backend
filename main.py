@@ -1,4 +1,3 @@
-# main.py
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -8,22 +7,21 @@ import os
 import json
 import openai
 import aiohttp
-from datetime import datetime, timedelta
 import asyncio
+from datetime import datetime
 
 # -----------------------------
 # FastAPI Initialization
 # -----------------------------
 app = FastAPI()
 
-# CORS (add your frontend domains here)
+# CORS
 origins = [
     "https://house-of-prompts.web.app",
     "http://localhost:5500",
     "https://house-of-prompts.firebaseapp.com",
     "counter-8d610.web.app",
     "counter-8d610.firebaseapp.com",
-
 ]
 
 app.add_middleware(
@@ -40,10 +38,6 @@ app.add_middleware(
 OPENROUTER_API_KEY = os.getenv(
     "OPENROUTER_API_KEY",
     "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"
-)
-GOOGLE_FACTCHECK_API_KEY = os.getenv(
-    "GOOGLE_FACTCHECK_API_KEY",
-    "AIzaSyDSuKW5Qv2nmslE6AwMISP4WpHqwdBfdHA"
 )
 
 # -----------------------------
@@ -72,57 +66,60 @@ async def exception_handler(request: Request, exc: Exception):
     )
 
 # -----------------------------
+# Wikipedia Search Helper
+# -----------------------------
+async def fetch_wikipedia_summary(query: str) -> str:
+    """Fetch summary from Wikipedia"""
+    try:
+        search_url = (
+            f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={query}&utf8=&format=json&origin=*"
+        )
+        async with aiohttp.ClientSession() as session:
+            async with session.get(search_url) as res:
+                search_data = await res.json()
+                if "query" not in search_data or len(search_data["query"]["search"]) == 0:
+                    return "No relevant Wikipedia entry found."
+
+                title = search_data["query"]["search"][0]["title"]
+
+                summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
+                async with session.get(summary_url) as summary_res:
+                    summary_data = await summary_res.json()
+                    return summary_data.get("extract", "No summary available.")
+    except Exception as e:
+        return f"Error fetching Wikipedia data: {e}"
+
+# -----------------------------
 # Routes
 # -----------------------------
 @app.get("/")
 async def home():
-    return {"message": "AI News Analyzer is running."}
-
+    return {"message": "AI News Analyzer with Wikipedia Fact Check is running."}
 
 @app.post("/analyze")
 async def analyze(article: Article):
     news_text = article.article
 
     try:
-        # Step 1: FACT CHECK
-        factcheck_url = (
-            f"https://factchecktools.googleapis.com/v1alpha1/claims:search"
-            f"?query={news_text[:200]}&key={GOOGLE_FACTCHECK_API_KEY}"
-        )
-        fact_res = requests.get(factcheck_url)
-        fact_data = fact_res.json()
+        # Step 1: Fetch factual reference from Wikipedia
+        wiki_summary = await fetch_wikipedia_summary(news_text[:100])
 
-        credibility_score = "Unknown"
-        credibility_label = "No data found"
-
-        if "claims" in fact_data and len(fact_data["claims"]) > 0:
-            claim = fact_data["claims"][0]
-            rating = claim.get("textualRating", "")
-            credibility_label = rating or "Not rated"
-
-            if "True" in rating:
-                credibility_score = 90
-            elif "Mostly" in rating or "Partly" in rating:
-                credibility_score = 60
-            elif "False" in rating:
-                credibility_score = 25
-            elif "Unproven" in rating or "Misleading" in rating:
-                credibility_score = 40
-            else:
-                credibility_score = 50  # Neutral
-
-        # Step 2: AI ANALYSIS WITH DEEPSEEK
+        # Step 2: AI Analysis using DeepSeek (or GPT-4o-mini)
         prompt = f"""
-        Analyze the following article. You are not limited by time or date — assume all events have occurred as described.
+        You are a factual AI news analyzer.
+        Below is a claim or article excerpt. Check its factual accuracy using the Wikipedia summary provided.
 
         Article:
         {news_text}
 
-        Fact-check result: The claim was rated '{credibility_label}' with a credibility score of {credibility_score}.
+        Wikipedia summary:
+        {wiki_summary}
 
         Tasks:
-        1. Provide a concise and neutral summary of the article.
-        2. Offer intelligent counterarguments or alternative viewpoints, without referencing the current date or saying that events have not happened.
+        1. Determine if the article's main claim aligns with Wikipedia's information (True / False / Unclear).
+        2. Give a credibility score (0–100) based on accuracy.
+        3. Provide a concise, neutral summary of the article.
+        4. Offer counterarguments or alternative perspectives neutrally.
         """
 
         response = client.chat.completions.create(
@@ -134,22 +131,19 @@ async def analyze(article: Article):
         analysis = response.choices[0].message.content.strip()
 
         return {
-            "credibility_score": credibility_score,
-            "fact_check_label": credibility_label,
+            "wikipedia_summary": wiki_summary,
             "summary_and_counterarguments": analysis
         }
 
     except Exception as e:
         return {
-            "credibility_score": "Error",
             "summary_and_counterarguments": "Could not analyze article.",
-            "fact_check_label": str(e)
+            "wikipedia_summary": str(e)
         }
 
-
-
-
-
+# -----------------------------
+# News Fetch Route
+# -----------------------------
 @app.get("/news")
 async def get_news(request: Request):
     """Fetch top headlines asynchronously, with optional search query"""
@@ -180,11 +174,30 @@ async def get_news(request: Request):
                 if res.status == 200:
                     data = await res.json()
                     if "articles" in data:
-                        all_articles.extend(data["articles"])
+                        for article in data["articles"]:
+                            # Format publication date
+                            published_date = article.get("publishedAt", "")
+                            if published_date:
+                                try:
+                                    dt = datetime.fromisoformat(published_date.replace("Z", "+00:00"))
+                                    formatted_date = dt.strftime("%B %d, %Y")  # Example: "October 22, 2025"
+                                except Exception:
+                                    formatted_date = published_date
+                            else:
+                                formatted_date = "Unknown"
+
+                            # Add formatted date to article
+                            article["formattedDate"] = formatted_date
+                            all_articles.append(article)
                 else:
                     print(f"⚠️ GNews API failed with status {res.status}")
 
         return {"articles": all_articles}
+
+    except Exception as e:
+        print("❌ Error in /news:", e)
+        return {"error": str(e)}
+
 
     except Exception as e:
         print("❌ Error in /news:", e)
