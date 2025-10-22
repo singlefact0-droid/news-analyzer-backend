@@ -101,10 +101,8 @@ async def analyze(article: Article):
     news_text = article.article
 
     try:
-        # Step 1: Fetch factual reference from Wikipedia
         wiki_summary = await fetch_wikipedia_summary(news_text[:100])
 
-        # Step 2: AI Analysis using DeepSeek (or GPT-4o-mini)
         prompt = f"""
 You are a factual AI news analyzer.
 Below is a claim or article excerpt. Check its factual accuracy using the Wikipedia summary provided.
@@ -137,7 +135,6 @@ Return your answer strictly as a JSON object:
 
         analysis_text = response.choices[0].message.content.strip()
 
-        # Attempt to parse AI response as JSON
         try:
             analysis_json = json.loads(analysis_text)
         except:
@@ -147,7 +144,6 @@ Return your answer strictly as a JSON object:
                 "counterarguments": "No counterarguments found."
             }
 
-        # Return structured result for frontend
         return {
             **analysis_json,
             "wikipedia_summary": wiki_summary
@@ -160,6 +156,7 @@ Return your answer strictly as a JSON object:
             "counterarguments": "Please check backend or API key.",
             "wikipedia_summary": str(e)
         }
+
 
 
 # -----------------------------
@@ -223,5 +220,6 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
+
 
 
