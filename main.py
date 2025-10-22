@@ -20,8 +20,8 @@ origins = [
     "https://house-of-prompts.web.app",
     "http://localhost:5500",
     "https://house-of-prompts.firebaseapp.com",
-    "counter-8d610.web.app",
-    "counter-8d610.firebaseapp.com",
+    "https://counter-8d610.web.app",
+    "https://counter-8d610.firebaseapp.com",
 ]
 
 app.add_middleware(
@@ -202,3 +202,4 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
+
