@@ -16,11 +16,15 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://counter-8d610.web.app",  # your frontend
+        "http://localhost:5500"            # optional for local testing
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ---------------------------
 # API keys
@@ -180,3 +184,4 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
+
