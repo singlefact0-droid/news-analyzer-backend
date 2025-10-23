@@ -83,7 +83,7 @@ async def analyze_article(request: ArticleRequest):
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "deepseek/deepseek-chat",
+                    "model": "mistralai/mistral-small-3.2-24b-instruct:free",
                     "messages": [
                         {"role": "system", "content": "You are an objective tone and bias detector."},
                         {"role": "user", "content": prompt},
@@ -191,6 +191,7 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
+
 
 
 
