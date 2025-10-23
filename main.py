@@ -105,27 +105,26 @@ async def analyze_article(request: ArticleRequest):
                 "emotional_bias": bias_match.group(1) if bias_match else "Neutral",
             }
 
-        # 🔹 Fetch similar articles using DuckDuckGo (with title + URL)
-        query = urllib.parse.quote(article[:100])
-        duck_url = f"https://html.duckduckgo.com/html/?q={query}"
+      # 🔹 Fetch similar articles using DuckDuckGo Lite (more stable)
+query = urllib.parse.quote(article[:200])
+duck_url = f"https://lite.duckduckgo.com/lite/?q={query}"
 
-        similar_articles = []
-        async with aiohttp.ClientSession() as session:
-            async with session.get(duck_url, headers={"User-Agent": "Mozilla/5.0"}) as duck_res:
-                if duck_res.status == 200:
-                    html = await duck_res.text()
+similar_articles = []
+async with aiohttp.ClientSession() as session:
+    async with session.get(duck_url, headers={"User-Agent": "Mozilla/5.0"}) as duck_res:
+        if duck_res.status == 200:
+            html = await duck_res.text()
+            matches = re.findall(r'<a rel="nofollow" href="(https?://[^"]+)".*?>(.*?)</a>', html, re.DOTALL)
+            for link, title in matches[:3]:
+                clean_title = re.sub(r'<.*?>', '', title).strip()
+                similar_articles.append({
+                    "title": clean_title,
+                    "url": link
+                })
 
-                    # Extract titles and URLs
-                    titles = re.findall(r'<a[^>]+class="result__a"[^>]*>(.*?)</a>', html)
-                    links = re.findall(r'<a[^>]+class="result__a"[^>]+href="(https?://[^"]+)"', html)
+if not similar_articles:
+    similar_articles = [{"title": "No similar articles found.", "url": "#"}]
 
-                    for title, link in zip(titles, links):
-                        clean_title = re.sub(r'<.*?>', '', title)  # remove HTML tags
-                        if len(similar_articles) < 2:
-                            similar_articles.append({
-                                "title": clean_title,
-                                "url": link
-                            })
 
         return {
             "summary": analysis.get("summary", "No summary found."),
