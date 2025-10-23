@@ -14,12 +14,19 @@ import re
 # ---------------------------
 app = FastAPI()
 
+# CORS (add your frontend domains here)
+origins = [
+    "https://house-of-prompts.web.app",
+    "http://localhost:5500",
+    "https://house-of-prompts.firebaseapp.com",
+    "counter-8d610.web.app",
+    "counter-8d610.firebaseapp.com",
+
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://counter-8d610.web.app",  # your frontend
-        "http://localhost:5500"            # optional for local testing
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -184,4 +191,5 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
+
 
