@@ -105,22 +105,33 @@ async def analyze_article(request: ArticleRequest):
                 "emotional_bias": bias_match.group(1) if bias_match else "Neutral",
             }
 
-      # 🔹 Fetch similar articles using DuckDuckGo Lite (more stable)
-query = urllib.parse.quote(article[:200])
+     # 🔹 Fetch similar articles using DuckDuckGo Lite (more stable)
+try:
+    query = urllib.parse.quote(article[:200])
+except Exception as e:
+    print("Error encoding query:", e)
+    query = ""
+
 duck_url = f"https://lite.duckduckgo.com/lite/?q={query}"
 
 similar_articles = []
+
 async with aiohttp.ClientSession() as session:
     async with session.get(duck_url, headers={"User-Agent": "Mozilla/5.0"}) as duck_res:
         if duck_res.status == 200:
             html = await duck_res.text()
-            matches = re.findall(r'<a rel="nofollow" href="(https?://[^"]+)".*?>(.*?)</a>', html, re.DOTALL)
+            matches = re.findall(
+                r'<a rel="nofollow" href="(https?://[^"]+)".*?>(.*?)</a>', 
+                html, 
+                re.DOTALL
+            )
             for link, title in matches[:3]:
                 clean_title = re.sub(r'<.*?>', '', title).strip()
                 similar_articles.append({
                     "title": clean_title,
                     "url": link
                 })
+
 
 if not similar_articles:
     similar_articles = [{"title": "No similar articles found.", "url": "#"}]
@@ -190,6 +201,7 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
+
 
 
 
