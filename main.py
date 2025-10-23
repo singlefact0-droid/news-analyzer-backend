@@ -25,8 +25,8 @@ app.add_middleware(
 # ---------------------------
 # API keys
 # ---------------------------
-DEEPSEEK_API_KEY = os.getenv("OPENROUTER_API_KEY")  # Set this in Render environment
-GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"  # Replace if needed
+DEEPSEEK_API_KEY = os.getenv("OPENROUTER_API_KEY")
+GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
 
 # ---------------------------
 # Request model
@@ -45,15 +45,14 @@ async def analyze_article(request: ArticleRequest):
         return {"error": "No article text provided."}
 
     try:
-        # ✳️ DeepSeek prompt for summary and emotional bias only
+        # ✳️ DeepSeek prompt for summary and emotional bias
         prompt = f"""
         You are an AI specialized in emotional tone and bias detection.
         Analyze the following article and respond in strict JSON format.
 
         TASKS:
         1. Write a concise, objective summary (no external context or factual checking).
-        2. Describe the emotional bias (if any) — e.g. fear, outrage, hope, positivity, neutrality.
-
+        2. State some counter arguements regarding the view of the articles (do not use real life data just give emotional bias with everything within the article).
         Respond ONLY in JSON format:
         {{
           "summary": "...",
@@ -95,24 +94,27 @@ async def analyze_article(request: ArticleRequest):
                 "emotional_bias": bias_match.group(1) if bias_match else "Neutral",
             }
 
-        # 🔹 Fetch similar articles using DuckDuckGo (2 results)
+        # 🔹 Fetch similar articles using DuckDuckGo (with title + URL)
         query = urllib.parse.quote(article[:100])
-        duck_url = f"https://duckduckgo.com/html/?q={query}"
+        duck_url = f"https://html.duckduckgo.com/html/?q={query}"
 
         similar_articles = []
         async with aiohttp.ClientSession() as session:
             async with session.get(duck_url, headers={"User-Agent": "Mozilla/5.0"}) as duck_res:
                 if duck_res.status == 200:
                     html = await duck_res.text()
-                    links = re.findall(r'href="(https?://[^"]+)"', html)
-                    unique_links = []
-                    for link in links:
-                        if "duckduckgo.com" not in link and link not in unique_links:
-                            unique_links.append(link)
-                        if len(unique_links) >= 2:
-                            break
-                    for link in unique_links:
-                        similar_articles.append({"url": link})
+
+                    # Extract titles and URLs
+                    titles = re.findall(r'<a[^>]+class="result__a"[^>]*>(.*?)</a>', html)
+                    links = re.findall(r'<a[^>]+class="result__a"[^>]+href="(https?://[^"]+)"', html)
+
+                    for title, link in zip(titles, links):
+                        clean_title = re.sub(r'<.*?>', '', title)  # remove HTML tags
+                        if len(similar_articles) < 2:
+                            similar_articles.append({
+                                "title": clean_title,
+                                "url": link
+                            })
 
         return {
             "summary": analysis.get("summary", "No summary found."),
