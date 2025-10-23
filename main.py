@@ -1,167 +1,131 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import requests
+import aiohttp
 import os
 import json
-import openai
-import aiohttp
-import asyncio
-from datetime import datetime
+import urllib.parse
 
-# -----------------------------
-# FastAPI Initialization
-# -----------------------------
 app = FastAPI()
 
-# CORS
-origins = [
-    "https://house-of-prompts.web.app",
-    "http://localhost:5500",
-    "https://house-of-prompts.firebaseapp.com",
-    "https://counter-8d610.web.app",
-    "https://counter-8d610.firebaseapp.com",
-]
-
+# ---------------------------
+# CORS setup
+# ---------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# -----------------------------
-# API Keys
-# -----------------------------
-OPENROUTER_API_KEY = os.getenv(
-    "OPENROUTER_API_KEY",
-    "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"
-)
+# ---------------------------
+# API keys
+# ---------------------------
+DEEPSEEK_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# -----------------------------
-# OpenRouter Client (DeepSeek)
-# -----------------------------
-client = openai.OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY
-)
-
-# -----------------------------
-# Models
-# -----------------------------
-class Article(BaseModel):
+# ---------------------------
+# Request model
+# ---------------------------
+class ArticleRequest(BaseModel):
     article: str
 
-# -----------------------------
-# Exception Handler
-# -----------------------------
-@app.exception_handler(Exception)
-async def exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={"error": str(exc)},
-        headers={"Access-Control-Allow-Origin": "*"},
-    )
 
-# -----------------------------
-# Wikipedia Search Helper
-# -----------------------------
-async def fetch_wikipedia_summary(query: str) -> str:
-    """Fetch summary from Wikipedia"""
-    try:
-        search_url = (
-            f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={query}&utf8=&format=json&origin=*"
-        )
-        async with aiohttp.ClientSession() as session:
-            async with session.get(search_url) as res:
-                search_data = await res.json()
-                if "query" not in search_data or len(search_data["query"]["search"]) == 0:
-                    return "No relevant Wikipedia entry found."
-
-                title = search_data["query"]["search"][0]["title"]
-
-                summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
-                async with session.get(summary_url) as summary_res:
-                    summary_data = await summary_res.json()
-                    return summary_data.get("extract", "No summary available.")
-    except Exception as e:
-        return f"Error fetching Wikipedia data: {e}"
-
-# -----------------------------
+# ---------------------------
 # Routes
-# -----------------------------
-@app.get("/")
-async def home():
-    return {"message": "AI News Analyzer with Wikipedia Fact Check is running."}
-
+# ---------------------------
 @app.post("/analyze")
-async def analyze(article: Article):
-    news_text = article.article
+async def analyze_article(request: ArticleRequest):
+    article = request.article.strip()
+    if not article:
+        return {"error": "No article text provided."}
 
     try:
-        wiki_summary = await fetch_wikipedia_summary(news_text[:100])
-
+        # ✳️ DeepSeek prompt for emotional bias and short summary
         prompt = f"""
-You are a factual AI news analyzer.
-Below is a claim or article excerpt. Check its factual accuracy using the Wikipedia summary provided.
+        You are an advanced AI specializing in emotional tone and bias detection.
+        Analyze the following news article and respond in JSON.
 
-Article:
-{news_text}
+        TASKS:
+        1. Provide a short, neutral summary of the article (no opinions or external context).
+        2. Describe the emotional bias (if any) — such as positivity, fear, outrage, hope, or neutrality.
+        3. Avoid fact-checking, real-world accuracy, or referencing future/past events.
 
-Wikipedia summary:
-{wiki_summary}
+        Respond ONLY in JSON format with:
+        {{
+          "summary": "...",
+          "emotional_bias": "..."
+        }}
 
-Tasks:
-1. Determine if the article's main claim aligns with Wikipedia's information (True / False / Unclear).
-2. Give a credibility score (0–100) based on accuracy.
-3. Provide a concise, neutral summary of the article.
-4. Offer counterarguments or alternative perspectives neutrally.
+        ARTICLE:
+        {article}
+        """
 
-Return your answer strictly as a JSON object:
-{{
-    "credibility_score": number,
-    "summary": "text",
-    "counterarguments": "text"
-}}
-"""
+        # 🔹 Send to DeepSeek
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "deepseek/deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": "You are an objective tone and bias detector."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.6,
+                },
+            ) as deepseek_res:
+                result = await deepseek_res.json()
+                raw_reply = result["choices"][0]["message"]["content"]
 
-        response = client.chat.completions.create(
-            model="deepseek/deepseek-r1:free",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=400
-        )
-
-        analysis_text = response.choices[0].message.content.strip()
-
+        # 🔹 Parse DeepSeek output safely
         try:
-            analysis_json = json.loads(analysis_text)
-        except:
-            analysis_json = {
-                "credibility_score": "Unavailable",
-                "summary": "No summary available.",
-                "counterarguments": "No counterarguments found."
+            analysis = json.loads(raw_reply)
+        except json.JSONDecodeError:
+            # Fallback if DeepSeek doesn't return perfect JSON
+            summary = raw_reply.split("emotional_bias")[0].strip()
+            emotional_bias = raw_reply.split("emotional_bias")[-1].strip()
+            analysis = {
+                "summary": summary or "No summary available.",
+                "emotional_bias": emotional_bias or "Neutral"
             }
 
+        # 🔹 Fetch similar articles from DuckDuckGo (2 results)
+        query = urllib.parse.quote(article[:120])
+        duck_url = f"https://duckduckgo.com/?q={query}&format=json&no_redirect=1"
+
+        similar_articles = []
+        async with aiohttp.ClientSession() as session:
+            async with session.get(duck_url, headers={"User-Agent": "Mozilla/5.0"}) as duck_res:
+                if duck_res.status == 200:
+                    text = await duck_res.text()
+                    # DuckDuckGo doesn't provide structured JSON in `format=json` anymore,
+                    # so we will use search result links via HTML scrape
+                    import re
+                    matches = re.findall(r'https://[a-zA-Z0-9./?=_-]+', text)
+                    unique_links = []
+                    for link in matches:
+                        if "duckduckgo" not in link and link not in unique_links:
+                            unique_links.append(link)
+                        if len(unique_links) >= 2:
+                            break
+                    for link in unique_links:
+                        similar_articles.append({"url": link})
+
         return {
-            **analysis_json,
-            "wikipedia_summary": wiki_summary
+            "summary": analysis.get("summary", "No summary found."),
+            "emotional_bias": analysis.get("emotional_bias", "Neutral"),
+            "similar_articles": similar_articles,
         }
 
     except Exception as e:
-        return {
-            "credibility_score": "Error",
-            "summary": "Could not analyze article.",
-            "counterarguments": "Please check backend or API key.",
-            "wikipedia_summary": str(e)
-        }
+        return {"error": str(e)}
 
+import requests
 
-
-# -----------------------------
-# News Fetch Route
-# -----------------------------
 @app.get("/news")
 async def get_news(request: Request):
     """Fetch top headlines asynchronously, with optional search query"""
@@ -220,6 +184,4 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
-
-
 
