@@ -21,7 +21,6 @@ origins = [
     "https://house-of-prompts.firebaseapp.com",
     "https://counter-8d610.web.app",
     "https://counter-8d610.firebaseapp.com",
-
 ]
 
 app.add_middleware(
@@ -31,7 +30,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # ---------------------------
 # API keys
@@ -44,7 +42,6 @@ GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
 # ---------------------------
 class ArticleRequest(BaseModel):
     article: str
-
 
 # ---------------------------
 # DeepSeek Analysis Route
@@ -63,7 +60,9 @@ async def analyze_article(request: ArticleRequest):
 
         TASKS:
         1. Write a concise, objective summary (no external context or factual checking).
-        2. State some counter arguements regarding the view of the articles (do not use real life data just give emotional bias with everything within the article).
+        2. State some counter arguments regarding the view of the article 
+           (do not use real life data, just emotional bias within the article).
+
         Respond ONLY in JSON format:
         {{
           "summary": "...",
@@ -105,43 +104,37 @@ async def analyze_article(request: ArticleRequest):
                 "emotional_bias": bias_match.group(1) if bias_match else "Neutral",
             }
 
-
         # 🔹 Fetch similar articles using DuckDuckGo Lite (more stable)
-try:
-    query = urllib.parse.quote(article[:200])
-except Exception as e:
-    print("Error encoding query:", e)
-    query = ""
+        try:
+            query = urllib.parse.quote(article[:200])
+        except Exception as e:
+            print("Error encoding query:", e)
+            query = ""
 
-duck_url = f"https://lite.duckduckgo.com/lite/?q={query}"
+        duck_url = f"https://lite.duckduckgo.com/lite/?q={query}"
+        similar_articles = []
 
-similar_articles = []
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(duck_url, headers={"User-Agent": "Mozilla/5.0"}) as duck_res:
+                    if duck_res.status == 200:
+                        html = await duck_res.text()
+                        matches = re.findall(
+                            r'<a rel="nofollow" href="(https?://[^"]+)".*?>(.*?)</a>',
+                            html,
+                            re.DOTALL
+                        )
+                        for link, title in matches[:3]:
+                            clean_title = re.sub(r'<.*?>', '', title).strip()
+                            similar_articles.append({
+                                "title": clean_title,
+                                "url": link
+                            })
+        except Exception as e:
+            print("Error fetching DuckDuckGo results:", e)
 
-try:
-    async with aiohttp.ClientSession() as session:
-        async with session.get(duck_url, headers={"User-Agent": "Mozilla/5.0"}) as duck_res:
-            if duck_res.status == 200:
-                html = await duck_res.text()
-                matches = re.findall(
-                    r'<a rel="nofollow" href="(https?://[^"]+)".*?>(.*?)</a>',
-                    html,
-                    re.DOTALL
-                )
-                for link, title in matches[:3]:
-                    clean_title = re.sub(r'<.*?>', '', title).strip()
-                    similar_articles.append({
-                        "title": clean_title,
-                        "url": link
-                    })
-except Exception as e:
-    print("Error fetching DuckDuckGo results:", e)
-
-if not similar_articles:
-    similar_articles = [{"title": "No similar articles found.", "url": "#"}]
-
-
-     
-
+        if not similar_articles:
+            similar_articles = [{"title": "No similar articles found.", "url": "#"}]
 
         return {
             "summary": analysis.get("summary", "No summary found."),
@@ -152,7 +145,6 @@ if not similar_articles:
     except Exception as e:
         print("❌ Error in /analyze:", e)
         return {"error": str(e)}
-
 
 # ---------------------------
 # GNews Route
@@ -207,10 +199,3 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
-
-
-
-
-
-
-
