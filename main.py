@@ -219,19 +219,22 @@ async def upload_article(request: Request):
                 return {"error": f"{field} is required."}
 
         # Insert into Supabase
-        res = supabase.table("articles").insert({
-            "title": data["title"],
-            "description": data["description"],
-            "image_url": data.get("image_url", ""),
-            "source_url": data["source_url"],
-            "published_date": data["published_date"]
-        }).execute()
+       res = supabase.table("articles").insert({
+           "title": data["title"],
+           "description": data.get("description", ""),
+           "image_url": data.get("image_url", ""),
+           "source_url": data["source_url"],
+           "published_date": data["published_date"]
+       }).execute()
 
-        if res.error:
-            return {"error": res.error.message}
+       # Check if insert succeeded
+       if res.status_code != 201:   # 201 = success
+           return {"error": res.json().get("message", "Unknown error")}
 
-        return {"status": "success", "data": res.data}
+       return {"status": "success", "data": res.json()}
+
 
     except Exception as e:
         return {"error": str(e)}
+
 
