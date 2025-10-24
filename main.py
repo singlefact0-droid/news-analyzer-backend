@@ -235,10 +235,17 @@ async def upload_article(request: Request):
                 error_msg = str(res)
             return {"error": error_msg}
 
-        return {"status": "success", "data": res.json()}
+        # ✅ Friendly success message
+        return {
+            "status": "success",
+            "message": "✅ Article uploaded successfully!",
+            "article_title": data["title"]
+        }
 
     except Exception as e:
         return {"error": str(e)}
+
+
 
 
 
