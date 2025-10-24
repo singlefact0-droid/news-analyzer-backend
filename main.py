@@ -6,7 +6,7 @@ import asyncio
 import os
 import json
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from supabase import create_client, Client
 
@@ -147,6 +147,8 @@ async def analyze_article(request: ArticleRequest):
 # ---------------------------
 # News Route (Supabase + GNews)
 # ---------------------------
+
+
 @app.get("/news")
 async def get_news():
     try:
@@ -161,12 +163,15 @@ async def get_news():
             if pub_date:
                 try:
                     dt = datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
+                    # Convert naive datetime to UTC-aware
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
                     formatted_date = dt.strftime("%B %d, %Y")
                 except Exception:
-                    dt = datetime.min
+                    dt = datetime.min.replace(tzinfo=timezone.utc)
                     formatted_date = pub_date
             else:
-                dt = datetime.min
+                dt = datetime.min.replace(tzinfo=timezone.utc)
                 formatted_date = "Unknown"
 
             image_url = article.get("image_url") or "https://via.placeholder.com/400x200?text=No+Image"
@@ -209,10 +214,10 @@ async def get_news():
                                 dt = datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
                                 formatted_date = dt.strftime("%B %d, %Y")
                             except Exception:
-                                dt = datetime.min
+                                dt = datetime.min.replace(tzinfo=timezone.utc)
                                 formatted_date = pub_date
                         else:
-                            dt = datetime.min
+                            dt = datetime.min.replace(tzinfo=timezone.utc)
                             formatted_date = "Unknown"
 
                         image_url = article.get("image") or "https://via.placeholder.com/400x200?text=No+Image"
@@ -240,6 +245,7 @@ async def get_news():
 
     except Exception as e:
         return {"error": str(e)}
+
 
 # ---------------------------
 # Upload Article Route
@@ -304,3 +310,4 @@ async def upload_article(request: Request):
 
     except Exception as e:
         return {"error": str(e)}
+
