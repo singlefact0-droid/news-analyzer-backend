@@ -156,13 +156,36 @@ async def analyze_article(request: ArticleRequest):
 # ---------------------------
 @app.get("/news")
 async def get_news(request: Request):
-    """Fetch top headlines asynchronously, with optional search query"""
+    """Fetch top headlines from both GNews and Supabase."""
     base_url = "https://gnews.io/api/v4/top-headlines"
     query = request.query_params.get("q", "")
     categories = ["general", "world", "science", "nation"]
     all_articles = []
 
     try:
+        # ---------------------------
+        # 1️⃣ Fetch from Supabase
+        # ---------------------------
+        try:
+            res = supabase.table("articles").select("*").execute()
+            db_articles = res.data if hasattr(res, "data") else []
+
+            for art in db_articles:
+                all_articles.append({
+                    "title": art.get("title", "Untitled"),
+                    "description": art.get("description", ""),
+                    "image": art.get("image_url", ""),  # Match GNews key name
+                    "url": art.get("source_url", ""),
+                    "publishedAt": art.get("published_date", ""),
+                    "formattedDate": art.get("published_date", "")[:10],
+                    "source": "Supabase"
+                })
+        except Exception as e:
+            print("⚠️ Error fetching from Supabase:", e)
+
+        # ---------------------------
+        # 2️⃣ Fetch from GNews
+        # ---------------------------
         async with aiohttp.ClientSession() as session:
             tasks = []
             for cat in categories:
@@ -185,25 +208,44 @@ async def get_news(request: Request):
                     if "articles" in data:
                         for article in data["articles"]:
                             published_date = article.get("publishedAt", "")
+                            formatted_date = "Unknown"
                             if published_date:
                                 try:
                                     dt = datetime.fromisoformat(published_date.replace("Z", "+00:00"))
                                     formatted_date = dt.strftime("%B %d, %Y")
                                 except Exception:
                                     formatted_date = published_date
-                            else:
-                                formatted_date = "Unknown"
 
                             article["formattedDate"] = formatted_date
+                            article["source"] = "GNews"
                             all_articles.append(article)
                 else:
                     print(f"⚠️ GNews API failed with status {res.status}")
 
-        return {"articles": all_articles}
+        # ---------------------------
+        # 3️⃣ Sort by published date (newest first)
+        # ---------------------------
+        def parse_date(date_str):
+            try:
+                return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            except Exception:
+                return datetime.min
+
+        all_articles.sort(key=lambda x: parse_date(x.get("publishedAt", "")), reverse=True)
+
+        # ---------------------------
+        # ✅ Final combined result
+        # ---------------------------
+        return {
+            "status": "success",
+            "count": len(all_articles),
+            "articles": all_articles
+        }
 
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
+
 
 
 
@@ -244,6 +286,7 @@ async def upload_article(request: Request):
 
     except Exception as e:
         return {"error": str(e)}
+
 
 
 
