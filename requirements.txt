@@ -5,3 +5,4 @@ pydantic
 requests
 feedparser
 aiohttp
+supabase
