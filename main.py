@@ -156,7 +156,7 @@ async def analyze_article(request: ArticleRequest):
 # ---------------------------
 @app.get("/news")
 async def get_news(request: Request):
-    """Fetch top headlines from both GNews and Supabase."""
+    """Fetch top headlines from both GNews and Supabase, and auto-fetch missing images."""
     base_url = "https://gnews.io/api/v4/top-headlines"
     query = request.query_params.get("q", "")
     categories = ["general", "world", "science", "nation"]
@@ -170,16 +170,36 @@ async def get_news(request: Request):
             res = supabase.table("articles").select("*").execute()
             db_articles = res.data if hasattr(res, "data") else []
 
-            for art in db_articles:
-                all_articles.append({
-                    "title": art.get("title", "Untitled"),
-                    "description": art.get("description", ""),
-                    "image": art.get("image_url", ""),  # Match GNews key name
-                    "url": art.get("source_url", ""),
-                    "publishedAt": art.get("published_date", ""),
-                    "formattedDate": art.get("published_date", "")[:10],
-                    "source": "Supabase"
-                })
+            async with aiohttp.ClientSession() as session:
+                for art in db_articles:
+                    image_url = art.get("image_url", "")
+
+                    # 🔹 Auto-fetch image if missing
+                    if not image_url and art.get("source_url"):
+                        try:
+                            async with session.get(art["source_url"], timeout=6) as r:
+                                if r.status == 200:
+                                    html = await r.text()
+                                    match = re.search(r'<meta property="og:image" content="(.*?)"', html)
+                                    if match:
+                                        image_url = match.group(1)
+
+                                        # ✅ Update Supabase permanently
+                                        supabase.table("articles").update({
+                                            "image_url": image_url
+                                        }).eq("id", art["id"]).execute()
+                        except Exception as e:
+                            print(f"⚠️ Could not fetch image for {art['title']}: {e}")
+
+                    all_articles.append({
+                        "title": art.get("title", "Untitled"),
+                        "description": art.get("description", ""),
+                        "image": image_url,
+                        "url": art.get("source_url", ""),
+                        "publishedAt": art.get("published_date", ""),
+                        "formattedDate": art.get("published_date", "")[:10],
+                        "source": "Supabase"
+                    })
         except Exception as e:
             print("⚠️ Error fetching from Supabase:", e)
 
@@ -286,6 +306,7 @@ async def upload_article(request: Request):
 
     except Exception as e:
         return {"error": str(e)}
+
 
 
 
