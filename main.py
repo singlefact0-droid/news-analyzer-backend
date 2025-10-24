@@ -8,6 +8,11 @@ import json
 import urllib.parse
 from datetime import datetime
 import re
+from supabase import create_client, Client
+
+SUPABASE_URL = "https://uzfcsexiyckrkgfnvirk.supabase.co"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")  
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ---------------------------
 # FastAPI setup
@@ -61,7 +66,7 @@ async def analyze_article(request: ArticleRequest):
         TASKS:
         1. Write a concise, objective summary (no external context or factual checking).
         2. State some counter arguments regarding the view of the article 
-           (do not use real life data, just emotional bias within the article).
+           (do not use real life data, just the data within the article).
 
         Respond ONLY in JSON format:
         {{
