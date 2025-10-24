@@ -212,29 +212,33 @@ async def upload_article(request: Request):
     try:
         data = await request.json()
 
-        # Validate required fields
+        # ✅ Validate required fields
         required_fields = ["title", "source_url", "published_date"]
         for field in required_fields:
             if not data.get(field):
                 return {"error": f"{field} is required."}
 
-        # Insert into Supabase
-       res = supabase.table("articles").insert({
-           "title": data["title"],
-           "description": data.get("description", ""),
-           "image_url": data.get("image_url", ""),
-           "source_url": data["source_url"],
-           "published_date": data["published_date"]
-       }).execute()
+        # ✅ Insert into Supabase
+        res = supabase.table("articles").insert({
+            "title": data["title"],
+            "description": data.get("description", ""),
+            "image_url": data.get("image_url", ""),
+            "source_url": data["source_url"],
+            "published_date": data["published_date"]
+        }).execute()
 
-       # Check if insert succeeded
-       if res.status_code != 201:   # 201 = success
-           return {"error": res.json().get("message", "Unknown error")}
+        # ✅ Check if insert succeeded
+        if getattr(res, "status_code", None) != 201:  # 201 means success
+            try:
+                error_msg = res.json().get("message", "Unknown error")
+            except Exception:
+                error_msg = str(res)
+            return {"error": error_msg}
 
-       return {"status": "success", "data": res.json()}
-
+        return {"status": "success", "data": res.json()}
 
     except Exception as e:
         return {"error": str(e)}
+
 
 
