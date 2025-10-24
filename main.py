@@ -204,3 +204,34 @@ async def get_news(request: Request):
     except Exception as e:
         print("❌ Error in /news:", e)
         return {"error": str(e)}
+
+
+
+@app.post("/upload-article")
+async def upload_article(request: Request):
+    try:
+        data = await request.json()
+
+        # Validate required fields
+        required_fields = ["title", "source_url", "published_date"]
+        for field in required_fields:
+            if not data.get(field):
+                return {"error": f"{field} is required."}
+
+        # Insert into Supabase
+        res = supabase.table("articles").insert({
+            "title": data["title"],
+            "description": data["description"],
+            "image_url": data.get("image_url", ""),
+            "source_url": data["source_url"],
+            "published_date": data["published_date"]
+        }).execute()
+
+        if res.error:
+            return {"error": res.error.message}
+
+        return {"status": "success", "data": res.data}
+
+    except Exception as e:
+        return {"error": str(e)}
+
