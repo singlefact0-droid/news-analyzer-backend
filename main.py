@@ -80,7 +80,7 @@ async def analyze_article(request: ArticleRequest):
         # Try Mistral first
         reply, model_used = await call_openrouter_model(
             prompt,
-            "mistralai/mistral-small-3.2-24b-instruct:free"
+            "mistralai/mistral-small-3.2-24b-instruct:free121323sqsq"
         )
 
         # Fallback to GPT-4o if Mistral fails
@@ -338,5 +338,6 @@ async def upload_article(request: Request):
 
     except Exception as e:
         return {"error": str(e)}
+
 
 
