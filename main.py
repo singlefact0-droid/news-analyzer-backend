@@ -9,6 +9,7 @@ import urllib.parse
 from datetime import datetime, timezone
 import re
 from supabase import create_client, Client
+import openai
 
 SUPABASE_URL = "https://uzfcsexiyckrkgfnvirk.supabase.co"
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")  
@@ -39,7 +40,6 @@ app.add_middleware(
 # ---------------------------
 # API keys
 # ---------------------------
-DEEPSEEK_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GNEWS_API_KEY = "2bad3eea46a5af8373e977e781fc5547"
 
 # ---------------------------
@@ -49,7 +49,7 @@ class ArticleRequest(BaseModel):
     article: str
 
 # ---------------------------
-# DeepSeek Analysis Route
+# AI Analysis Route
 # ---------------------------
 @app.post("/analyze")
 async def analyze_article(request: ArticleRequest):
@@ -60,14 +60,14 @@ async def analyze_article(request: ArticleRequest):
     try:
         prompt = f"""
         You are an AI specialized in emotional tone and bias detection.
-        Analyze the following article and respond in strict JSON format.
+        Analyze the following article and respond strictly in JSON format.
 
         TASKS:
         1. Write a concise, objective summary (no external context or factual checking).
-        2. State some counter arguments regarding the view of the article 
-           (do not use real life data, just the data within the article).
+        2. Provide a few counterarguments to the article's claims 
+           (use only data mentioned within the article).
 
-        Respond ONLY in JSON format:
+        Respond ONLY in JSON format like this:
         {{
           "summary": "...",
           "emotional_bias": "..."
@@ -77,44 +77,36 @@ async def analyze_article(request: ArticleRequest):
         {article}
         """
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "mistralai/mistral-small-3.2-24b-instruct:free",
-                    "messages": [
-                        {"role": "system", "content": "You are an objective tone and bias detector."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "temperature": 0.6,
-                },
-            ) as deepseek_res:
-                result = await deepseek_res.json()
-                raw_reply = result["choices"][0]["message"]["content"]
+        # Try Mistral first
+        reply, model_used = await call_openrouter_model(
+            prompt,
+            "mistralai/mistral-small-3.2-24b-instruct:free"
+        )
 
+        # Fallback to GPT-4o if Mistral fails
+        if reply is None:
+            print("⚠️ Mistral failed — switching to GPT-4o fallback")
+            reply, model_used = await call_openrouter_model(prompt, "openai/gpt-4o-mini")
+
+        if not reply:
+            return {"error": "Both models failed to respond."}
+
+        # Parse response JSON
         try:
-            analysis = json.loads(raw_reply)
+            analysis = json.loads(reply)
         except json.JSONDecodeError:
-            summary_match = re.search(r'"summary"\s*:\s*"(.*?)"', raw_reply, re.DOTALL)
-            bias_match = re.search(r'"emotional_bias"\s*:\s*"(.*?)"', raw_reply, re.DOTALL)
+            summary_match = re.search(r'"summary"\s*:\s*"(.*?)"', reply, re.DOTALL)
+            bias_match = re.search(r'"emotional_bias"\s*:\s*"(.*?)"', reply, re.DOTALL)
             analysis = {
                 "summary": summary_match.group(1) if summary_match else "No summary available.",
                 "emotional_bias": bias_match.group(1) if bias_match else "Neutral",
             }
 
-        # Fetch similar articles using DuckDuckGo Lite
-        try:
-            query = urllib.parse.quote(article[:200])
-        except Exception as e:
-            print("Error encoding query:", e)
-            query = ""
-
+        # --- DuckDuckGo similar articles search ---
+        query = urllib.parse.quote(article[:200])
         similar_articles = []
         duck_url = f"https://lite.duckduckgo.com/lite/?q={query}"
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(duck_url, headers={"User-Agent": "Mozilla/5.0"}) as duck_res:
@@ -135,6 +127,7 @@ async def analyze_article(request: ArticleRequest):
             similar_articles = [{"title": "No similar articles found.", "url": "#"}]
 
         return {
+            "model_used": model_used,
             "summary": analysis.get("summary", "No summary found."),
             "emotional_bias": analysis.get("emotional_bias", "Neutral"),
             "similar_articles": similar_articles,
@@ -143,6 +136,41 @@ async def analyze_article(request: ArticleRequest):
     except Exception as e:
         print("❌ Error in /analyze:", e)
         return {"error": str(e)}
+
+
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+async def call_openrouter_model(prompt: str, model: str):
+    """Calls Mistral or GPT-4o via OpenRouter using the same API key"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "You are an objective tone and bias detector."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.6,
+                },
+            ) as res:
+                if res.status == 200:
+                    data = await res.json()
+                    return data["choices"][0]["message"]["content"], model
+                else:
+                    print(f"❌ OpenRouter {model} failed with status:", res.status)
+                    return None, model
+    except Exception as e:
+        print(f"⚠️ Exception with {model}:", e)
+        return None, model
+
+
 
 # ---------------------------
 # News Route (Supabase + GNews)
@@ -310,4 +338,5 @@ async def upload_article(request: Request):
 
     except Exception as e:
         return {"error": str(e)}
+
 
