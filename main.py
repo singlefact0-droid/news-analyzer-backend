@@ -22,11 +22,9 @@ app = FastAPI()
 
 # CORS (add your frontend domains here)
 origins = [
-    "https://house-of-prompts.web.app",
+    "https://one0one101.web.app",
     "http://localhost:5500",
-    "https://house-of-prompts.firebaseapp.com",
-    "https://counter-8d610.web.app",
-    "https://counter-8d610.firebaseapp.com",
+    "https://one0one101.firebaseapp.com",
 ]
 
 app.add_middleware(
@@ -338,6 +336,7 @@ async def upload_article(request: Request):
 
     except Exception as e:
         return {"error": str(e)}
+
 
 
 
